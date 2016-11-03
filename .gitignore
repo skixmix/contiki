@@ -129,3 +129,9 @@ LOG_OPENOCD
 # nRF52 build artifacts
 *.jlink
 *.nrf52dk
+/nbproject/configurations.xml
+/nbproject/private/configurations.xml
+/nbproject/private/launcher.properties
+/nbproject/project.xml
+/nbproject/private/Default.properties
+/nbproject/private/private.xml
