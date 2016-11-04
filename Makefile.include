@@ -100,6 +100,13 @@ else
     CFLAGS += -DUIP_CONF_IPV6_RPL=0
 endif
 
+ifeq ($(CONTIKI_WITH_SDN),1)
+    CFLAGS += -DNETSTACK_CONF_SDN=1
+    MODULES += core/net/sdn
+else
+    CFLAGS += -DNETSTACK_CONF_SDN=0
+endif
+
 CONTIKI_SOURCEFILES += $(CONTIKIFILES)
 
 CONTIKIDIRS += ${addprefix $(CONTIKI)/core/,dev lib net net/llsec net/mac net/rime \
