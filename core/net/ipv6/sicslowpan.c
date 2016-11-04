@@ -1255,7 +1255,11 @@ send_packet(linkaddr_t *dest)
 
   /* Provide a callback function to receive the result of
      a packet transmission. */
-  NETSTACK_LLSEC.send(&packet_sent, NULL);
+#if NETSTACK_CONF_SDN == 1
+    NETSTACK_INTERCEPTOR.send(&packet_sent, NULL);
+#else
+    NETSTACK_LLSEC.send(&packet_sent, NULL);
+#endif
 
   /* If we are sending multiple packets in a row, we need to let the
      watchdog know that we are still alive. */

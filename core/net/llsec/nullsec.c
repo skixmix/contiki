@@ -64,7 +64,13 @@ send(mac_callback_t sent, void *ptr)
 static void
 input(void)
 {
+    
+#if NETSTACK_CONF_SDN == 1
+  NETSTACK_INTERCEPTOR.input();
+#else
   NETSTACK_NETWORK.input();
+#endif
+
 }
 /*---------------------------------------------------------------------------*/
 const struct llsec_driver nullsec_driver = {

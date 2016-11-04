@@ -51,6 +51,14 @@
 #endif /* NETSTACK_CONF_NETWORK */
 #endif /* NETSTACK_NETWORK */
 
+#ifndef NETSTACK_INTERCEPTOR
+#ifdef NETSTACK_CONF_INTERCEPTOR
+#define NETSTACK_INTERCEPTOR NETSTACK_CONF_INTERCEPTOR
+#else /* NETSTACK_CONF_INTERCEPTOR */
+#define NETSTACK_INTERCEPTOR sdn_driver
+#endif /* NETSTACK_CONF_INTERCEPTOR */
+#endif /* NETSTACK_INTERCEPTOR */
+
 #ifndef NETSTACK_LLSEC
 #ifdef NETSTACK_CONF_LLSEC
 #define NETSTACK_LLSEC NETSTACK_CONF_LLSEC
@@ -110,6 +118,7 @@
 #include "net/mac/rdc.h"
 #include "net/mac/framer.h"
 #include "dev/radio.h"
+#include "net/sdn/interceptor.h"
 
 /**
  * The structure of a network driver in Contiki.
@@ -125,6 +134,7 @@ struct network_driver {
 };
 
 extern const struct network_driver NETSTACK_NETWORK;
+extern const struct interceptor_driver NETSTACK_INTERCEPTOR;
 extern const struct llsec_driver   NETSTACK_LLSEC;
 extern const struct rdc_driver     NETSTACK_RDC;
 extern const struct mac_driver     NETSTACK_MAC;
