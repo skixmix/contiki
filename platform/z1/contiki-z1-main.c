@@ -318,6 +318,8 @@ main(int argc, char **argv)
 
   NETSTACK_RDC.init();
   NETSTACK_MAC.init();
+  NETSTACK_LLSEC.init();
+  NETSTACK_INTERCEPTOR.init();
   NETSTACK_NETWORK.init();
 
   printf("%s %s, channel check rate %lu Hz, radio channel %u\n",
@@ -359,6 +361,8 @@ main(int argc, char **argv)
 
   NETSTACK_RDC.init();
   NETSTACK_MAC.init();
+  NETSTACK_LLSEC.init();
+  NETSTACK_INTERCEPTOR.init();
   NETSTACK_NETWORK.init();
 
   printf("%s %s, channel check rate %lu Hz, radio channel %u\n",
