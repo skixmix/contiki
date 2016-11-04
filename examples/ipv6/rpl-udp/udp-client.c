@@ -40,6 +40,17 @@
 #include <stdio.h>
 #include <string.h>
 
+//ADDED
+#include "net/nbr-table.h"
+#include "net/link-stats.h"
+#include "net/rpl/rpl.h"
+#include "net/ipv6/uip-nd6.h"
+
+
+#define UIP_CONF_ROUTER 1
+
+//ADDED
+
 /* Only for TMOTE Sky? */
 #include "dev/serial-line.h"
 #include "dev/uart1.h"
@@ -64,6 +75,7 @@
 
 static struct uip_udp_conn *client_conn;
 static uip_ipaddr_t server_ipaddr;
+static struct uip_ds6_notification n;
 
 /*---------------------------------------------------------------------------*/
 PROCESS(udp_client_process, "UDP client process");
@@ -134,6 +146,25 @@ print_local_addresses(void)
     }
   }
 }
+/*----------------ADDED----------------*/
+static void
+route_callback_notify(int event, uip_ipaddr_t *route, uip_ipaddr_t *ipaddr, int numroutes)
+{
+	if(event == UIP_DS6_NOTIFICATION_DEFRT_ADD)
+		printf("Nuova default route per ");
+	else if(event == UIP_DS6_NOTIFICATION_DEFRT_RM)
+		printf("Rimossa default route per ");
+	else if(event == UIP_DS6_NOTIFICATION_ROUTE_ADD)
+		printf("Aggiunta route per ");
+	else
+		printf("Rimossa route per ");
+	PRINT6ADDR(route);
+	printf(" -> ");
+	PRINT6ADDR(ipaddr);
+	printf("\n");
+}
+/*----------------ADDED----------------*/
+
 /*---------------------------------------------------------------------------*/
 static void
 set_global_address(void)
@@ -144,20 +175,15 @@ set_global_address(void)
   uip_ds6_set_addr_iid(&ipaddr, &uip_lladdr);
   uip_ds6_addr_add(&ipaddr, 0, ADDR_AUTOCONF);
 
-/* The choice of server address determines its 6LoWPAN header compression.
- * (Our address will be compressed Mode 3 since it is derived from our
- * link-local address)
+/* The choice of server address determines its 6LoPAN header compression.
+ * (Our address will be compressed Mode 3 since it is derived from our link-local address)
  * Obviously the choice made here must also be selected in udp-server.c.
  *
- * For correct Wireshark decoding using a sniffer, add the /64 prefix to the
- * 6LowPAN protocol preferences,
- * e.g. set Context 0 to fd00::. At present Wireshark copies Context/128 and
- * then overwrites it.
- * (Setting Context 0 to fd00::1111:2222:3333:4444 will report a 16 bit
- * compressed address of fd00::1111:22ff:fe33:xxxx)
+ * For correct Wireshark decoding using a sniffer, add the /64 prefix to the 6LowPAN protocol preferences,
+ * e.g. set Context 0 to fd00::.  At present Wireshark copies Context/128 and then overwrites it.
+ * (Setting Context 0 to fd00::1111:2222:3333:4444 will report a 16 bit compressed address of fd00::1111:22ff:fe33:xxxx)
  *
- * Note the IPCMV6 checksum verification depends on the correct uncompressed
- * addresses.
+ * Note the IPCMV6 checksum verification depends on the correct uncompressed addresses.
  */
  
 #if 0
@@ -190,6 +216,8 @@ PROCESS_THREAD(udp_client_process, ev, data)
          NBR_TABLE_CONF_MAX_NEIGHBORS, UIP_CONF_MAX_ROUTES);
 
   print_local_addresses();
+  
+ 
 
   /* new connection with remote host */
   client_conn = udp_new(NULL, UIP_HTONS(UDP_SERVER_PORT), NULL); 
@@ -205,13 +233,18 @@ PROCESS_THREAD(udp_client_process, ev, data)
 	UIP_HTONS(client_conn->lport), UIP_HTONS(client_conn->rport));
 
   /* initialize serial line */
+/*
   uart1_set_input(serial_line_input_byte);
   serial_line_init();
-
+*/
 
 #if WITH_COMPOWER
   powertrace_sniff(POWERTRACE_ON);
 #endif
+
+  //ADDED
+  uip_ds6_notification_add(&n, route_callback_notify);	
+  //ADDED
 
   etimer_set(&periodic, SEND_INTERVAL);
   while(1) {
@@ -258,6 +291,7 @@ PROCESS_THREAD(udp_client_process, ev, data)
       etimer_reset(&periodic);
       ctimer_set(&backoff_timer, SEND_TIME, send_packet, NULL);
 
+
 #if WITH_COMPOWER
       if (print == 0) {
 	powertrace_print("#P");
@@ -268,7 +302,40 @@ PROCESS_THREAD(udp_client_process, ev, data)
 #endif
 
     }
+    //ADDED
+    uip_ds6_nbr_t *nbr;
+    uip_lladdr_t *lladdr;
+    int freshness;
+    struct link_stats * stats;
+    PRINTF("Neighbours:\n");
+    for(nbr = nbr_table_head(ds6_neighbors); nbr != NULL; nbr = nbr_table_next(ds6_neighbors, nbr)) {
+        lladdr = uip_ds6_nbr_get_ll(nbr);
+	stats = link_stats_from_lladdr(lladdr);
+        freshness = link_stats_is_fresh(stats);
+	PRINTF(" MAC: ");	
+	PRINTLLADDR(lladdr);
+	PRINTF(" IPv6: ");
+	PRINT6ADDR(uip_ds6_nbr_get_ipaddr(nbr));
+	printf(" RSSI= %i ETX= %u Freshness= %i", stats->rssi, stats->etx, freshness);
+        PRINTF("\n");
+    }
+
+    rpl_dag_t *dag = rpl_get_any_dag();
+     uip_ipaddr_t * ip_address_parent = rpl_get_parent_ipaddr(dag->preferred_parent);
+     printf("IP Addr of my parent: ");
+     PRINT6ADDR(ip_address_parent);
+     printf("\n");	
+     printf("DAG ID: ");
+     PRINT6ADDR(&dag->dag_id);
+     printf("\n");
+     printf("Prefix info: ");
+     PRINT6ADDR(&dag->prefix_info.prefix);
+     printf("\n");
+    //printf("\n RPL Neighbors: \n");
+    //rpl_print_neighbor_list();
+    //ADDED	
   }
+
 
   PROCESS_END();
 }
