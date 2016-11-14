@@ -170,19 +170,39 @@ rule_t* create_rule(field_t field, uint8_t offset, uint8_t size, operator_t oper
     return r;
 }
 
-uint8_t add_entry(uint16_t priority, rule_t* rule, action_t* action){
+entry_t* create_entry(uint16_t priority){
     entry_t* entry;
-    entry_t* tmp;
-    entry_t* help = NULL;
+    if(priority < 0){
+        PRINTF("[FLT]: Failed to create a new entry bacause of invalid parameters\n");
+        return NULL;
+    }
+    entry = allocate_entry();
+    if(entry == NULL)
+        return NULL;
+    entry->priority = priority;
+    return entry;
+}
+
+uint8_t add_rule_to_entry(entry_t* entry, rule_t* rule){
     if(rule == NULL){
-        PRINTF("[FLT]: Failed to add a new entry bacause of invalid parameters\n");
+        PRINTF("[FLT]: Failed to add a new rule bacause of invalid parameters\n");
         return -1;
     }
-    
-    entry = allocate_entry();
-    entry->priority = priority;
     list_add(entry->rules, rule);
+}
+
+uint8_t add_action_to_entry(entry_t* entry, action_t* action){
+    if(action == NULL){
+        PRINTF("[FLT]: Failed to add a new action bacause of invalid parameters\n");
+        return -1;
+    }
     list_add(entry->actions, action);
+}
+
+uint8_t add_entry_to_ft(entry_t* entry){
+    entry_t* tmp = NULL;
+    entry_t* help = NULL;
+    uint16_t priority = entry->priority;
     
     //Sorted insert into the flow table list  
     for(tmp = list_head(flowtable); tmp != NULL; tmp = tmp->next){
@@ -317,14 +337,24 @@ void print_flowtable() {
 
 void flowtable_test(){
     flowtable_init();
+    rule_t* rule2;
     rule_t* rule = create_rule(MH_DST_ADDR, 0, 64, EQUAL, "feff001");
     action_t* action= create_action(FORWARD, NO_FIELD, 0, 64, "feff002");
-    add_entry(2, rule, action);
+    entry_t* entry = create_entry(1);
     rule = create_rule(SICSLO_DISPATCH, 0, 8, EQUAL, "c");
     action= create_action(MODIFY, SICSLO_DISPATCH, 0, 8, "b");
-    add_entry(5, rule, action);
+    add_rule_to_entry(entry, rule);    
+    add_action_to_entry(entry, action);
+    add_entry_to_ft(entry);
+    
+    entry = create_entry(2);
     rule = create_rule(SICSLO_IPHC, 0, 16, EQUAL, "ca");
+    rule2 = create_rule(MH_DST_ADDR, 0, 8, EQUAL, "t");    
     action= create_action(MODIFY, SICSLO_IPHC, 3, 32, "34ca");
-    add_entry(1, rule, action);
+    add_rule_to_entry(entry, rule);
+    add_rule_to_entry(entry, rule2);     
+    add_action_to_entry(entry, action);
+    add_entry_to_ft(entry);
+    
     print_flowtable();
 }
