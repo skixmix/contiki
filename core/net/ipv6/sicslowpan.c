@@ -1188,7 +1188,7 @@ uncompress_hdr_iphc(uint8_t *buf, uint16_t ip_len)
 /** @} */
 #endif /* SICSLOWPAN_COMPRESSION == SICSLOWPAN_COMPRESSION_HC06 */
 
-/*
+/**
  * Function which extracts the IPv6 destination address from the 6LoWPAN packet.
  * It takes care of possible header compression.
  * \param destAddr Pointer where to copy the IPv6 address
@@ -1213,6 +1213,7 @@ uint8_t readIPaddr(uip_ipaddr_t* destAddr){
 #endif /*SICSLOWPAN_CONF_FRAG*/
 
     /* Update link statistics */
+//TODO: da spostare nel modulo SDN perchè altrimenti le statistiche potrebbero essere falsate
     link_stats_input_callback(packetbuf_addr(PACKETBUF_ADDR_SENDER));
 
     /* init */
@@ -1301,7 +1302,7 @@ uint8_t readIPaddr(uip_ipaddr_t* destAddr){
 
     if(is_fragment && !first_fragment) {
         /* this is a FRAGN, skip the header compression dispatch section */
-        goto copypayload;
+        goto my_copypayload;
     }
 #endif /* SICSLOWPAN_CONF_FRAG */
 
@@ -1333,7 +1334,7 @@ uint8_t readIPaddr(uip_ipaddr_t* destAddr){
 
 
 #if SICSLOWPAN_CONF_FRAG
-copypayload:
+my_copypayload:
 #endif /*SICSLOWPAN_CONF_FRAG*/
     /*
      * copy "payload" from the packetbuf buffer to the sicslowpan_buf
@@ -1761,6 +1762,7 @@ input(void)
 #endif /*SICSLOWPAN_CONF_FRAG*/
 
   /* Update link statistics */
+//TODO: da spostare nel modulo SDN perchè altrimenti le statistiche potrebbero essere falsate
   link_stats_input_callback(packetbuf_addr(PACKETBUF_ADDR_SENDER));
 
   /* init */

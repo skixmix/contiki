@@ -319,6 +319,28 @@ struct sicslowpan_nh_compressor {
 
 };
 
+/**
+ * Function which extracts the IPv6 destination address from the 6LoWPAN packet.
+ * It takes care of possible header compression.
+ * \param destAddr Pointer where to copy the IPv6 address
+ * \return An integer equals to -1 if some error occurs or if the parameter is NULL.
+ */
+uint8_t readIPaddr(uip_ipaddr_t* destAddr);
+/**
+ * Function that tells if the packet contained in the packetbuf has the Mesh 
+ * Header or not.
+ * \return An integer equals to -1 if some error occurs, equals to 1 if 
+ * there is the Mesh Header or 0 if not. 
+ */
+uint8_t pktHasMeshHeader();
+/**
+ * Function which extracts the Final Address from the 6LoWPAN packet.
+ * \param destMesh Pointer where to copy the link-layer address
+ * \return An integer equals to -1 if some error occurs, if the parameter is NULL
+ * or if the packet has not the Mesh Header.
+ */
+uint8_t readMeshAddr(linkaddr_t* destMesh);
+
 int sicslowpan_get_last_rssi(void);
 
 extern const struct network_driver sicslowpan_driver;
