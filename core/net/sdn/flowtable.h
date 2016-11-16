@@ -65,6 +65,7 @@ typedef enum {
     SICSLO_FRAGN_HDR,       //6LoWPAN Fragmentation Header (subsequent fragments)
     SICSLO_IPHC,            //6LoWPAN IPv6 Header Compression
     SICSLO_NHC,             //6LoWPAN IPv6 Next Header Compression
+    SICSLO_IPV6,            //6LoWPAN IPv6 Uncompressed IPv6 addresses
     IP_SRC_ADDR,            //IPv6 packet Source Address field
     IP_DST_ADDR,            //IPv6 packet Destination Address field
     IP_HL,                  //IPv6 packet Hop Limit field

@@ -46,17 +46,17 @@ sdn_init(void)
     uip_ip6addr(&ipAddrList[0], 0xff02, 0, 0, 0, 0, 0, 0, 0x001a);
 }
 
-uint8_t meshAddrIsMulticast(linkaddr_t* meshAddr){
+int meshAddrIsMulticast(linkaddr_t* meshAddr){
     if(meshAddr == NULL)
         return -1;
 }
 
-uint8_t ipAddrIsMulticast(uip_ipaddr_t* ipAddr){
+int ipAddrIsMulticast(uip_ipaddr_t* ipAddr){
     if(ipAddr == NULL)
         return -1;
 }
 
-uint8_t meshAddrListContains(linkaddr_t* meshAddr){
+int meshAddrListContains(linkaddr_t* meshAddr){
     if(meshAddr == NULL)
         return -1;
     int i;
@@ -67,7 +67,7 @@ uint8_t meshAddrListContains(linkaddr_t* meshAddr){
     return 0;
 }
 
-uint8_t ipAddrListContains(uip_ipaddr_t* ipAddr){
+int ipAddrListContains(uip_ipaddr_t* ipAddr){
     if(ipAddr == NULL)
         return -1;
     int i;
@@ -87,7 +87,7 @@ input(void)
     linkaddr_t* source;
     linkaddr_t* dest;
     uip_ipaddr_t ipAddr;
-    int8_t res;
+    int res;
     printf("SDN: Packet received from: ");
     source = packetbuf_addr(PACKETBUF_ADDR_SENDER);
     dest = packetbuf_addr(PACKETBUF_ADDR_RECEIVER);
@@ -104,9 +104,10 @@ input(void)
         printf("\n");
         NETSTACK_NETWORK.input();
     }
-    else
+    else{
         printf(" NO RPL PKT\n");
-    //NETSTACK_NETWORK.input();
+        NETSTACK_NETWORK.input();
+    }
 }
 
 /*
@@ -140,6 +141,6 @@ const struct interceptor_driver sdn_driver = {
 
 
 
-uint8_t forward(uint8_t nextLayer){
-    
+int forward(uint8_t nextLayer){
+    return -1;
 }

@@ -55,7 +55,7 @@ entry_t* allocate_entry(){
 
     e = memb_alloc(&entries_memb);
     if(e == NULL) {
-        clean_up_oldest_entry();
+        //clean_up_oldest_entry();
         e = memb_alloc(&entries_memb);
         if(e == NULL) {
             PRINTF("[FLT]: Failed to allocate an entry\n");
@@ -186,7 +186,7 @@ entry_t* create_entry(uint16_t priority){
 uint8_t add_rule_to_entry(entry_t* entry, rule_t* rule){
     if(rule == NULL){
         PRINTF("[FLT]: Failed to add a new rule bacause of invalid parameters\n");
-        return -1;
+        return 0;
     }
     list_add(entry->rules, rule);
 }
@@ -194,7 +194,7 @@ uint8_t add_rule_to_entry(entry_t* entry, rule_t* rule){
 uint8_t add_action_to_entry(entry_t* entry, action_t* action){
     if(action == NULL){
         PRINTF("[FLT]: Failed to add a new action bacause of invalid parameters\n");
-        return -1;
+        return 0;
     }
     list_add(entry->actions, action);
 }
