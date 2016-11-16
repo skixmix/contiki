@@ -82,6 +82,7 @@
 #define SICSLOWPAN_DISPATCH_IPHC                    0x60 /* 011xxxxx = ... */
 #define SICSLOWPAN_DISPATCH_FRAG1                   0xc0 /* 11000xxx */
 #define SICSLOWPAN_DISPATCH_FRAGN                   0xe0 /* 11100xxx */
+#define SICSLOWPAN_DISPATCH_MESH                    0x80 /* 10xxxxxx */
 /** @} */
 
 /** \name HC1 encoding

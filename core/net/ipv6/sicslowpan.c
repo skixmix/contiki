@@ -72,7 +72,8 @@
 
 #include <stdio.h>
 
-#define DEBUG DEBUG_NONE
+//#define DEBUG DEBUG_NONE
+#define DEBUG DEBUG_PRINT
 #include "net/ip/uip-debug.h"
 #if DEBUG
 /* PRINTFI and PRINTFO are defined for input and output to debug one without changing the timing of the other */
@@ -110,7 +111,7 @@ void uip_log(char *msg);
 /** \name Pointers in the packetbuf buffer
  *  @{
  */
-#define PACKETBUF_FRAG_PTR           (packetbuf_ptr)
+#define PACKETBUF_FRAG_PTR           (PACKETBUF_IPHC_BUF)
 #define PACKETBUF_FRAG_DISPATCH_SIZE 0   /* 16 bit */
 #define PACKETBUF_FRAG_TAG           2   /* 16 bit */
 #define PACKETBUF_FRAG_OFFSET        4   /* 8 bit */
@@ -586,6 +587,65 @@ compress_addr_64(uint8_t bitpos, uip_ipaddr_t *ipaddr, uip_lladdr_t *lladdr)
     hc06_ptr += 8;
     return 1 << bitpos; /* 64-bits */
   }
+}
+
+/*-------------------------------6LoWPAN SDN----------------------------------*/
+#define BIT(bit) (1 << bit)
+#define BIT_IS_SET(val, bit) (((val & (1 << bit)) >> bit) == 1)
+#define CLEAR_BIT(val, bit)  (val = (val & ~(1 << bit)))
+#define SET_BIT(val, bit)  (val = (val | (1 << bit)))
+#define MAX_NUM_ROUTE_OVER_ADDRS 5
+uip_ipaddr_t routeOverAddrList[MAX_NUM_ROUTE_OVER_ADDRS];
+
+
+int ipRouteOverListContains(uip_ipaddr_t* ipAddr){
+    if(ipAddr == NULL)
+        return -1;
+    int i;
+    for(i = 0; i < MAX_NUM_ROUTE_OVER_ADDRS; i++){
+        if(uip_ipaddr_cmp(&routeOverAddrList[i], ipAddr) != 0)
+            return 1;        
+    }
+    return 0;
+}
+
+int insertMeshHeader(){
+    uint8_t* app;
+    //Set the dispatch type equal to the Mesh one
+    uint8_t dispatch = SICSLOWPAN_DISPATCH_MESH;
+    /* move IPHC/IPv6 header */
+    memmove(packetbuf_ptr + 1, packetbuf_ptr, packetbuf_hdr_len);
+    //Set V and F equal to 1 (this means that the addresses will be on 64 bits)
+    SET_BIT(dispatch,4);
+    SET_BIT(dispatch,5);
+    SET_BIT(dispatch,0);
+    SET_BIT(dispatch,1);
+    SET_BIT(dispatch,2);
+    SET_BIT(dispatch,3);
+    *(packetbuf_ptr) = dispatch;
+   
+    packetbuf_hdr_len += 1;
+    
+    //PRINTF("SET MESH DISPATCH: %02x\n", *packetbuf_ptr);
+    return -1;
+}
+
+void meshUnderOrRouteOver(){
+    if(ipRouteOverListContains(&UIP_IP_BUF->destipaddr) == 1){
+        //ROUTE OVER -> do nothing
+        /*
+        PRINTF("Route over:");
+        PRINT6ADDR(&UIP_IP_BUF->destipaddr);
+        PRINTF("\n");
+        */
+        return;
+    }
+    else{
+        //MESH UNDER -> insert the Mesh Header
+        insertMeshHeader();
+        return;
+    }
+    
 }
 
 /*-------------------------------------------------------------------- */
@@ -1481,7 +1541,7 @@ packet_sent(void *ptr, int status, int transmissions)
  */
 static void
 send_packet(linkaddr_t *dest)
-{
+{  
   /* Set the link layer destination address for the packet as a
    * packetbuf attribute. The MAC layer can access the destination
    * address with the function packetbuf_addr(PACKETBUF_ADDR_RECEIVER).
@@ -1565,7 +1625,7 @@ output(const uip_lladdr_t *localdest)
   } else {
     linkaddr_copy(&dest, (const linkaddr_t *)localdest);
   }
-
+ 
   PRINTFO("sicslowpan output: sending packet len %d\n", uip_len);
 
   if(uip_len >= COMPRESSION_THRESHOLD) {
@@ -1641,6 +1701,9 @@ output(const uip_lladdr_t *localdest)
     frag_tag = my_tag++;
     SET16(PACKETBUF_FRAG_PTR, PACKETBUF_FRAG_TAG, frag_tag);
 
+    //Check if this packet needs the Mesh Header or not   
+    meshUnderOrRouteOver();
+    
     /* Copy payload and send */
     packetbuf_hdr_len += SICSLOWPAN_FRAG1_HDR_LEN;
     packetbuf_payload_len = (max_payload - packetbuf_hdr_len) & 0xfffffff8;
@@ -1683,7 +1746,10 @@ output(const uip_lladdr_t *localdest)
     while(processed_ip_out_len < uip_len) {
       PRINTFO("sicslowpan output: fragment ");
       PACKETBUF_FRAG_PTR[PACKETBUF_FRAG_OFFSET] = processed_ip_out_len >> 3;
-
+      
+      //Check if this packet needs the Mesh Header or not   
+      meshUnderOrRouteOver();
+      
       /* Copy payload and send */
       if(uip_len - processed_ip_out_len < packetbuf_payload_len) {
         /* last fragment */
@@ -1718,7 +1784,10 @@ output(const uip_lladdr_t *localdest)
     return 0;
 #endif /* SICSLOWPAN_CONF_FRAG */
   } else {
-
+      
+    //Check if this packet needs the Mesh Header or not   
+    meshUnderOrRouteOver();
+    
     /*
      * The packet does not need to be fragmented
      * copy "payload" and send
@@ -1781,6 +1850,14 @@ input(void)
 
 #if SICSLOWPAN_CONF_FRAG
 
+  PRINTF("READ MESH DISPATCH: %02x\n", *(packetbuf_ptr));
+  
+  //Check for Mesh Header
+  if((*packetbuf_ptr & 0xc0) == SICSLOWPAN_DISPATCH_MESH){
+      packetbuf_ptr += 1;
+      PRINTF("MESH!!\n");
+  }
+  
   /*
    * Since we don't support the mesh and broadcast header, the first header
    * we look for is the fragmentation header
@@ -1859,6 +1936,7 @@ input(void)
 #if SICSLOWPAN_COMPRESSION == SICSLOWPAN_COMPRESSION_HC06
   if((PACKETBUF_HC1_PTR[PACKETBUF_HC1_DISPATCH] & 0xe0) == SICSLOWPAN_DISPATCH_IPHC) {
     PRINTFI("sicslowpan input: IPHC\n");
+    PRINTF("MESH received: %02x\n", *packetbuf_ptr);
     uncompress_hdr_iphc(buffer, frag_size);
   } else
 #endif /* SICSLOWPAN_COMPRESSION == SICSLOWPAN_COMPRESSION_HC06 */
@@ -2033,6 +2111,9 @@ sicslowpan_init(void)
 #endif /* SICSLOWPAN_CONF_MAX_ADDR_CONTEXTS > 1 */
 
 #endif /* SICSLOWPAN_COMPRESSION == SICSLOWPAN_COMPRESSION_HC06 */
+  
+  /*-----------------------------6LoWPAN SDN----------------------------------*/
+  uip_ip6addr(&routeOverAddrList[0], 0xff02, 0, 0, 0, 0, 0, 0, 0x001a);
 }
 /*--------------------------------------------------------------------*/
 int
