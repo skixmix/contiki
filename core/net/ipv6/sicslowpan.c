@@ -72,8 +72,8 @@
 
 #include <stdio.h>
 
-//#define DEBUG DEBUG_NONE
-#define DEBUG DEBUG_PRINT
+#define DEBUG DEBUG_NONE
+//#define DEBUG DEBUG_PRINT
 #include "net/ip/uip-debug.h"
 #if DEBUG
 /* PRINTFI and PRINTFO are defined for input and output to debug one without changing the timing of the other */
@@ -111,7 +111,7 @@ void uip_log(char *msg);
 /** \name Pointers in the packetbuf buffer
  *  @{
  */
-#define PACKETBUF_FRAG_PTR           (PACKETBUF_IPHC_BUF)
+#define PACKETBUF_FRAG_PTR           (packetbuf_ptr)
 #define PACKETBUF_FRAG_DISPATCH_SIZE 0   /* 16 bit */
 #define PACKETBUF_FRAG_TAG           2   /* 16 bit */
 #define PACKETBUF_FRAG_OFFSET        4   /* 8 bit */
@@ -595,8 +595,13 @@ compress_addr_64(uint8_t bitpos, uip_ipaddr_t *ipaddr, uip_lladdr_t *lladdr)
 #define CLEAR_BIT(val, bit)  (val = (val & ~(1 << bit)))
 #define SET_BIT(val, bit)  (val = (val | (1 << bit)))
 #define MAX_NUM_ROUTE_OVER_ADDRS 5
+#define MESH_FINAL_ADDR 1
+#define MESH_ORIGINATOR_ADDR 9
 uip_ipaddr_t routeOverAddrList[MAX_NUM_ROUTE_OVER_ADDRS];
 
+void inline print_ll_addr(uint8_t* addr){ 
+    printf(" %02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x ", addr[0], addr[1], addr[2], addr[3], addr[4], addr[5], addr[6], addr[7]);
+}
 
 int ipRouteOverListContains(uip_ipaddr_t* ipAddr){
     if(ipAddr == NULL)
@@ -609,25 +614,78 @@ int ipRouteOverListContains(uip_ipaddr_t* ipAddr){
     return 0;
 }
 
-int insertMeshHeader(){
-    uint8_t* app;
+void extractIidFromIpAddr(linkaddr_t* llAddr, uip_ip6addr_t* ipAddr){
+    if(ipAddr == NULL || llAddr == NULL)
+        return;
+    memcpy(llAddr->u8, ipAddr->u8 + 8, 8);
+    llAddr->u8[0] ^= 0x02;
+}
+
+uint8_t readMeshHeader(uint8_t* ptr_to_packet, linkaddr_t* finalAddr, linkaddr_t* origAddr){
+    uint8_t meshHeaderSize = 0;
+    uint8_t* ptr;
+    if(pktHasMeshHeader(ptr_to_packet) != 1)
+        return 0;
+    if(ptr_to_packet == NULL)
+        ptr = packetbuf_ptr;
+    else
+        ptr = ptr_to_packet;
+    meshHeaderSize += 1;
+    //TODO: parse the dispatch byte and check the bits V and F in order to derive the addresses length
+    //Assume that both addresses are 64 bits sized
+    if(finalAddr != NULL)  
+        memcpy(finalAddr->u8, ptr + MESH_FINAL_ADDR, LINKADDR_SIZE);
+    meshHeaderSize += LINKADDR_SIZE;
+    if(origAddr != NULL) 
+        memcpy(origAddr->u8, ptr + MESH_ORIGINATOR_ADDR, LINKADDR_SIZE);
+    meshHeaderSize += LINKADDR_SIZE;
+    return meshHeaderSize;
+}
+
+void setFinalAddr(linkaddr_t* finalAddr){
+    if(finalAddr == NULL)
+        return;
+    //TODO: parse the dispatch byte and check the bits V and F in order to derive the addresses length
+    //Assume that both addresses are 64 bits sized
+    memcpy(packetbuf_ptr + MESH_FINAL_ADDR, finalAddr->u8, LINKADDR_SIZE);
+}
+
+void insertMeshHeader(){
+    uint8_t dispatch;
+    uint8_t meshHeaderSize;
+    linkaddr_t finalAddress;
     //Set the dispatch type equal to the Mesh one
-    uint8_t dispatch = SICSLOWPAN_DISPATCH_MESH;
+    dispatch = SICSLOWPAN_DISPATCH_MESH;
+    //Set the size of the mesh header
+    meshHeaderSize = 1 + LINKADDR_SIZE*2;   //1 dispatch byte + final address (2 or 8 bytes)+ orig. address (2 or 8 bytes)
     /* move IPHC/IPv6 header */
-    memmove(packetbuf_ptr + 1, packetbuf_ptr, packetbuf_hdr_len);
+    memmove(packetbuf_ptr + meshHeaderSize, packetbuf_ptr, packetbuf_hdr_len);
+    packetbuf_hdr_len += meshHeaderSize;
     //Set V and F equal to 1 (this means that the addresses will be on 64 bits)
     SET_BIT(dispatch,4);
     SET_BIT(dispatch,5);
+
+    //TODO: the standard impose that if Hop Limit field is uqual to 1111, there 
+    //must be a subsequent byte that specifies the actual Hop Limit
+    
+    //Set the Hop Limit field equal to the maximum (TODO: handle different values)
     SET_BIT(dispatch,0);
     SET_BIT(dispatch,1);
     SET_BIT(dispatch,2);
     SET_BIT(dispatch,3);
     *(packetbuf_ptr) = dispatch;
-   
-    packetbuf_hdr_len += 1;
     
+    //Extract the L2 final address from the IP destination address
+    extractIidFromIpAddr(&finalAddress, &UIP_IP_BUF->destipaddr);
+    /*
+    printf("MESH: ");
+    print_ll_addr(finalAddress.u8);
+    printf("\n");
+    */
+    memcpy((packetbuf_ptr + MESH_FINAL_ADDR), finalAddress.u8, LINKADDR_SIZE);
+    
+    memcpy((packetbuf_ptr + MESH_ORIGINATOR_ADDR), linkaddr_node_addr.u8, LINKADDR_SIZE);
     //PRINTF("SET MESH DISPATCH: %02x\n", *packetbuf_ptr);
-    return -1;
 }
 
 void meshUnderOrRouteOver(){
@@ -646,6 +704,17 @@ void meshUnderOrRouteOver(){
         return;
     }
     
+}
+
+int pktHasMeshHeader(uint8_t* ptr_to_packet){
+    uint8_t* ptr;
+    if(ptr_to_packet == NULL)
+        ptr = packetbuf_ptr;
+    else
+        ptr = ptr_to_packet;
+    if((*ptr & 0xc0) == SICSLOWPAN_DISPATCH_MESH)
+        return 1;
+    return 0;
 }
 
 /*-------------------------------------------------------------------- */
@@ -1254,7 +1323,7 @@ uncompress_hdr_iphc(uint8_t *buf, uint16_t ip_len)
  * \param destAddr Pointer where to copy the IPv6 address
  * \return An integer equals to -1 if some error occurs or if the parameter is NULL
  */
-uint8_t readIPaddr(uip_ipaddr_t* destAddr){
+int readIPaddr(uip_ipaddr_t* destAddr){
     if(destAddr == NULL)
         return -1;
     /* size of the IP packet (read from fragment) */
@@ -1292,6 +1361,10 @@ uint8_t readIPaddr(uip_ipaddr_t* destAddr){
 
 #if SICSLOWPAN_CONF_FRAG
 
+    if(pktHasMeshHeader(NULL)){
+        packetbuf_hdr_len += readMeshHeader(NULL, NULL, NULL);
+    }
+    
     /*
      * Since we don't support the mesh and broadcast header, the first header
      * we look for is the fragmentation header
@@ -1850,12 +1923,12 @@ input(void)
 
 #if SICSLOWPAN_CONF_FRAG
 
-  PRINTF("READ MESH DISPATCH: %02x\n", *(packetbuf_ptr));
+  PRINTF("READ MESH DISPATCH: %02x %02x\n", *(packetbuf_ptr), *(packetbuf_ptr+1));
   
   //Check for Mesh Header
-  if((*packetbuf_ptr & 0xc0) == SICSLOWPAN_DISPATCH_MESH){
-      packetbuf_ptr += 1;
-      PRINTF("MESH!!\n");
+  if(pktHasMeshHeader(NULL)){
+      //Just ignore it
+      packetbuf_hdr_len += readMeshHeader(NULL, NULL, NULL);
   }
   
   /*
@@ -1936,7 +2009,6 @@ input(void)
 #if SICSLOWPAN_COMPRESSION == SICSLOWPAN_COMPRESSION_HC06
   if((PACKETBUF_HC1_PTR[PACKETBUF_HC1_DISPATCH] & 0xe0) == SICSLOWPAN_DISPATCH_IPHC) {
     PRINTFI("sicslowpan input: IPHC\n");
-    PRINTF("MESH received: %02x\n", *packetbuf_ptr);
     uncompress_hdr_iphc(buffer, frag_size);
   } else
 #endif /* SICSLOWPAN_COMPRESSION == SICSLOWPAN_COMPRESSION_HC06 */
