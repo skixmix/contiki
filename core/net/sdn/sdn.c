@@ -97,7 +97,7 @@ input(void)
     linkaddr_t* source;
     linkaddr_t* dest;
     linkaddr_t finalAddr;
-    linkaddr_t origAddr;
+    uint8_t finalAddrDim;
     uip_ipaddr_t ipAddr;
     int res;
     uint8_t* ptr = packetbuf_dataptr();
@@ -108,24 +108,27 @@ input(void)
     dest = packetbuf_addr(PACKETBUF_ADDR_RECEIVER);
     PRINTADDR(source);
     
-    
     /*------------------------------Logic------------------------------*/
     //Check if the pachet has Mesh Header    
     if(pktHasMeshHeader(ptr) == 1){
         
         //DEBUG
-        readMeshHeader(ptr, &finalAddr, &origAddr);
-        printf("Mesh: Final Address: ");
+        linkaddr_t origAddr;
+        uint8_t origAddrDim;
+        uint8_t hopLimit;
+        parseMeshHeader(ptr, &hopLimit, &finalAddr, &finalAddrDim, &origAddr, &origAddrDim);
+        printf("Mesh: Hop Limit: %u", hopLimit);
+        printf(" Dim = %u Final Address: ", finalAddrDim);
         PRINTADDR(&finalAddr);
-        printf("Mesh: Orig. Address: ");
+        printf(" Dim = %u Orig. Address: ", origAddrDim);
         PRINTADDR(&origAddr);
         printf("\n");
         //DEBUG
         
         //Read the Final Address from the Mesh Header
-        readMeshHeader(ptr, &finalAddr, NULL);
-        //Check if this packet is addressed to me
+        parseMeshHeader(ptr, NULL, &finalAddr, &finalAddrDim, NULL, NULL);
         
+        //Check if this packet is addressed to me
         if(meshAddrListContains(&finalAddr) == 1){
             //This packet must be sent to the upper layer
             NETSTACK_NETWORK.input();
@@ -149,6 +152,7 @@ input(void)
         }
     }
     else{
+        
         //Read the Destination Address from the IPv6 Header
         res = readIPaddr(&ipAddr);
         //DEBUG
@@ -161,6 +165,7 @@ input(void)
             //Something went wrong, drop the packet
             return;
         }
+        
         //Check if it is an RPL packet sent in multicast (all-rpl-nodes address)
         if(isRPLMulticast(&ipAddr) == 1){
             printf(" RPL PKT!");
@@ -175,16 +180,28 @@ input(void)
             }
         }
         else{
-            //If we are here it means that the packet doesn't belong 
-            //to the multicast of RPL 
-            printf(" NO RPL PKT\n");
-            //Check if this packet is addressed to me
-            if(ipAddrListContains(&ipAddr) == 1){
-                //This packet must be sent to the upper layer
-                NETSTACK_NETWORK.input();
+            //Check if it is a multicast address
+            if(uip_is_addr_mcast(&ipAddr) == 1){
+                //If so, first thing to do is to process the packet with the Flow Table
+                
+                //Then check if this packet belongs to a multicast group that I've joined
+                if(ipAddrListContains(&ipAddr) == 1){
+                    //This packet must be sent to the upper layer
+                    NETSTACK_NETWORK.input();
+                }
             }
             else{
-                //Otherwise it must be handled by the Flow Table
+                //If we are here it means that the packet doesn't belong 
+                //to the multicast of RPL 
+                printf(" NO RPL PKT\n");
+                //Check if this packet is addressed to me
+                if(ipAddrListContains(&ipAddr) == 1){
+                    //This packet must be sent to the upper layer
+                    NETSTACK_NETWORK.input();
+                }
+                else{
+                    //Otherwise it must be handled by the Flow Table
+                }
             }
         }    
     }
@@ -198,9 +215,12 @@ static void
 send(mac_callback_t sent, void *ptr)
 {
     linkaddr_t finalAddr;
+    uint8_t finalAddrDim;
     linkaddr_t origAddr;
+    uint8_t origAddrDim;
     linkaddr_t* source;
     linkaddr_t* dest;
+    uint8_t hopLimit;
     uint8_t* ptr_to_pkt = packetbuf_dataptr();
     const linkaddr_t fixed = {0xc1, 0x0c, 0x00, 0x00, 0x00, 0x00, 0x00, 0x05};
     const linkaddr_t new_dest = {0xc1, 0x0c, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02};
@@ -216,10 +236,11 @@ send(mac_callback_t sent, void *ptr)
     
     //DEBUG
     if(pktHasMeshHeader(ptr_to_pkt)){
-        readMeshHeader(ptr_to_pkt, &finalAddr, &origAddr);
-        printf("Mesh: Final Address: ");
+        parseMeshHeader(ptr_to_pkt, &hopLimit, &finalAddr, &finalAddrDim, &origAddr, &origAddrDim);
+        printf("Mesh: Hop Limit: %u", hopLimit);
+        printf(" Dim = %u Final Address: ", finalAddrDim);
         PRINTADDR(&finalAddr);
-        printf("Mesh: Orig. Address: ");
+        printf(" Dim = %u Orig. Address: ", origAddrDim);
         PRINTADDR(&origAddr);
         printf("\n");
     }
