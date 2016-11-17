@@ -590,13 +590,19 @@ compress_addr_64(uint8_t bitpos, uip_ipaddr_t *ipaddr, uip_lladdr_t *lladdr)
 }
 
 /*-------------------------------6LoWPAN SDN----------------------------------*/
+/*-----------Utility functions----------*/
 #define BIT(bit) (1 << bit)
 #define BIT_IS_SET(val, bit) (((val & (1 << bit)) >> bit) == 1)
 #define CLEAR_BIT(val, bit)  (val = (val & ~(1 << bit)))
 #define SET_BIT(val, bit)  (val = (val | (1 << bit)))
-#define MAX_NUM_ROUTE_OVER_ADDRS 5
-#define MESH_FINAL_ADDR 1
-#define MESH_ORIGINATOR_ADDR 9
+
+/*--------------Constants---------------*/
+#define MAX_NUM_ROUTE_OVER_ADDRS    5
+#define MESH_FINAL_ADDR             1
+#define MESH_ORIGINATOR_ADDR(F_bit) MESH_FINAL_ADDR + ((F_bit == 1) ? 8 : 2)
+#define MESH_V_FLAG                 5
+#define MESH_F_FLAG                 4
+#define MESH_DEFAULT_HL             0x0e    /* xxxx1110 */
 uip_ipaddr_t routeOverAddrList[MAX_NUM_ROUTE_OVER_ADDRS];
 
 void inline print_ll_addr(uint8_t* addr){ 
@@ -614,14 +620,29 @@ int ipRouteOverListContains(uip_ipaddr_t* ipAddr){
     return 0;
 }
 
-void extractIidFromIpAddr(linkaddr_t* llAddr, uip_ip6addr_t* ipAddr){
-    if(ipAddr == NULL || llAddr == NULL)
+void extractIidFromIpAddr(linkaddr_t* llAddr, uip_ip6addr_t* ipAddr, uint8_t* addrDim){
+    if(ipAddr == NULL || llAddr == NULL || addrDim == NULL)
         return;
-    memcpy(llAddr->u8, ipAddr->u8 + 8, 8);
-    llAddr->u8[0] ^= 0x02;
+    //Check if the IPv6 address is multicast
+    if(uip_is_addr_mcast(ipAddr) != 1){
+        //It is unicast, so extract the 64-bit-long MAC address straight from the IID
+        memcpy(llAddr->u8, ipAddr->u8 + 8, 8);
+        llAddr->u8[0] ^= 0x02;
+        *addrDim = 8;
+    }
+    else{
+        //It is multicast, so map the multicast address to 16 bits
+        llAddr->u8[6] = 0x80;
+        llAddr->u8[6] |= (ipAddr->u8[14] & ((1 << 5) - 1));
+        llAddr->u8[7] = ipAddr->u8[15];
+        *addrDim = 2;
+    }
 }
 
-uint8_t readMeshHeader(uint8_t* ptr_to_packet, linkaddr_t* finalAddr, linkaddr_t* origAddr){
+uint8_t parseMeshHeader(uint8_t* ptr_to_packet, uint8_t* hopLimit, 
+        linkaddr_t* finalAddr, uint8_t* finalAddrDim, 
+        linkaddr_t* origAddr, uint8_t* origAddrDim){
+    
     uint8_t meshHeaderSize = 0;
     uint8_t* ptr;
     if(pktHasMeshHeader(ptr_to_packet) != 1)
@@ -633,12 +654,41 @@ uint8_t readMeshHeader(uint8_t* ptr_to_packet, linkaddr_t* finalAddr, linkaddr_t
     meshHeaderSize += 1;
     //TODO: parse the dispatch byte and check the bits V and F in order to derive the addresses length
     //Assume that both addresses are 64 bits sized
-    if(finalAddr != NULL)  
-        memcpy(finalAddr->u8, ptr + MESH_FINAL_ADDR, LINKADDR_SIZE);
-    meshHeaderSize += LINKADDR_SIZE;
-    if(origAddr != NULL) 
-        memcpy(origAddr->u8, ptr + MESH_ORIGINATOR_ADDR, LINKADDR_SIZE);
-    meshHeaderSize += LINKADDR_SIZE;
+    /*----------Parse the Hop Limit field---------*/
+    if(hopLimit != 0)
+        *hopLimit = (*ptr) & ((1 << 4) - 1);
+    /*----------Parse the Final Address-----------*/
+    if(BIT_IS_SET(*ptr, MESH_F_FLAG)){  //64-bit long final address
+        if(finalAddr != NULL)  
+            memcpy(finalAddr->u8, ptr + MESH_FINAL_ADDR, LINKADDR_SIZE);
+        if(finalAddrDim != NULL)
+            *finalAddrDim = LINKADDR_SIZE;
+        meshHeaderSize += LINKADDR_SIZE;
+    }
+    else{                               //16-bit long final address
+        if(finalAddr != NULL) 
+            memcpy(finalAddr->u8 + 6, ptr + MESH_FINAL_ADDR, 2);
+        meshHeaderSize += 2;
+        if(finalAddrDim != NULL)
+            *finalAddrDim = 2;
+    }
+    /*----------Parse the Originator Address-----------*/
+    if(BIT_IS_SET(*ptr, MESH_V_FLAG)){  //64-bit long originator address
+        if(origAddr != NULL) 
+            memcpy(origAddr->u8, ptr + MESH_ORIGINATOR_ADDR(BIT_IS_SET(*ptr, MESH_F_FLAG)), LINKADDR_SIZE);
+        meshHeaderSize += LINKADDR_SIZE;
+        if(origAddrDim != NULL)
+            *origAddrDim = LINKADDR_SIZE;
+    }
+    else{                               //16-bit long originator address
+        if(origAddr != NULL) 
+            memcpy(origAddr->u8 + 6, ptr + MESH_ORIGINATOR_ADDR(BIT_IS_SET(*ptr, MESH_F_FLAG)), 2);
+        meshHeaderSize += 2;
+        if(origAddrDim != NULL)
+            *origAddrDim = 2;
+    }
+    
+    
     return meshHeaderSize;
 }
 
@@ -653,39 +703,59 @@ void setFinalAddr(linkaddr_t* finalAddr){
 void insertMeshHeader(){
     uint8_t dispatch;
     uint8_t meshHeaderSize;
+    uint8_t addrDim;
     linkaddr_t finalAddress;
     //Set the dispatch type equal to the Mesh one
     dispatch = SICSLOWPAN_DISPATCH_MESH;
-    //Set the size of the mesh header
-    meshHeaderSize = 1 + LINKADDR_SIZE*2;   //1 dispatch byte + final address (2 or 8 bytes)+ orig. address (2 or 8 bytes)
-    /* move IPHC/IPv6 header */
-    memmove(packetbuf_ptr + meshHeaderSize, packetbuf_ptr, packetbuf_hdr_len);
-    packetbuf_hdr_len += meshHeaderSize;
-    //Set V and F equal to 1 (this means that the addresses will be on 64 bits)
-    SET_BIT(dispatch,4);
-    SET_BIT(dispatch,5);
+    
+    
 
     //TODO: the standard impose that if Hop Limit field is uqual to 1111, there 
     //must be a subsequent byte that specifies the actual Hop Limit
     
     //Set the Hop Limit field equal to the maximum (TODO: handle different values)
-    SET_BIT(dispatch,0);
-    SET_BIT(dispatch,1);
-    SET_BIT(dispatch,2);
-    SET_BIT(dispatch,3);
-    *(packetbuf_ptr) = dispatch;
+    dispatch |= MESH_DEFAULT_HL;
+    
     
     //Extract the L2 final address from the IP destination address
-    extractIidFromIpAddr(&finalAddress, &UIP_IP_BUF->destipaddr);
-    /*
-    printf("MESH: ");
-    print_ll_addr(finalAddress.u8);
-    printf("\n");
-    */
-    memcpy((packetbuf_ptr + MESH_FINAL_ADDR), finalAddress.u8, LINKADDR_SIZE);
+    extractIidFromIpAddr(&finalAddress, &UIP_IP_BUF->destipaddr, &addrDim);
+    if(addrDim == 8){ //Long unicast address
+        
+        //Set the size of the mesh header
+        meshHeaderSize = 1 + LINKADDR_SIZE*2;   //1 dispatch byte + final address (2 or 8 bytes)+ orig. address (2 or 8 bytes)
+        /* move IPHC/IPv6 header */
+        memmove(packetbuf_ptr + meshHeaderSize, packetbuf_ptr, packetbuf_hdr_len);
+        packetbuf_hdr_len += meshHeaderSize;
+        
+        //Set V and F equal to 1 (this means that the addresses will be on 64 bits)
+        SET_BIT(dispatch,MESH_V_FLAG);
+        SET_BIT(dispatch,MESH_F_FLAG);
+        //Copy the final MAC address into the Mesh Header 
+        memcpy((packetbuf_ptr + MESH_FINAL_ADDR), finalAddress.u8, LINKADDR_SIZE);
+        //Copy the originator MAC address into the Mesh Header
+        memcpy(packetbuf_ptr + MESH_ORIGINATOR_ADDR(BIT_IS_SET(dispatch, MESH_F_FLAG)), linkaddr_node_addr.u8, LINKADDR_SIZE);
+        //PRINTF("SET MESH DISPATCH: %02x\n", *packetbuf_ptr);
+    }
+    else if(addrDim == 2){ //Short multicast address
+        
+        //Set the size of the mesh header
+        meshHeaderSize = 1 + 2 + LINKADDR_SIZE;   //1 dispatch byte + final address (2 or 8 bytes)+ orig. address (2 or 8 bytes)
+        /* move IPHC/IPv6 header */
+        memmove(packetbuf_ptr + meshHeaderSize, packetbuf_ptr, packetbuf_hdr_len);
+        packetbuf_hdr_len += meshHeaderSize;
+        
+        //Set only the V flag and leave flag F equals to 0 
+        //(it means final address on 16 bits and orig. address on 64 bits)
+        SET_BIT(dispatch,MESH_V_FLAG);
+        //Copy the final MAC address into the Mesh Header 
+        memcpy((packetbuf_ptr + MESH_FINAL_ADDR), finalAddress.u8 + 6, 2);
+        //Copy the originator MAC address into the Mesh Header
+        memcpy((packetbuf_ptr + 1 + 2), linkaddr_node_addr.u8, LINKADDR_SIZE);
+        
+    }
+    //Set the dispatch type into the packet
+    *(packetbuf_ptr) = dispatch;
     
-    memcpy((packetbuf_ptr + MESH_ORIGINATOR_ADDR), linkaddr_node_addr.u8, LINKADDR_SIZE);
-    //PRINTF("SET MESH DISPATCH: %02x\n", *packetbuf_ptr);
 }
 
 void meshUnderOrRouteOver(){
@@ -1362,7 +1432,7 @@ int readIPaddr(uip_ipaddr_t* destAddr){
 #if SICSLOWPAN_CONF_FRAG
 
     if(pktHasMeshHeader(NULL)){
-        packetbuf_hdr_len += readMeshHeader(NULL, NULL, NULL);
+        packetbuf_hdr_len += parseMeshHeader(NULL, NULL, NULL, NULL, NULL, NULL);
     }
     
     /*
@@ -1928,7 +1998,7 @@ input(void)
   //Check for Mesh Header
   if(pktHasMeshHeader(NULL)){
       //Just ignore it
-      packetbuf_hdr_len += readMeshHeader(NULL, NULL, NULL);
+      packetbuf_hdr_len += parseMeshHeader(NULL, NULL, NULL, NULL, NULL, NULL);
   }
   
   /*

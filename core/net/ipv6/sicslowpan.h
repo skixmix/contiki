@@ -337,12 +337,18 @@ int pktHasMeshHeader(uint8_t* ptr_to_packet);
 /**
  * Function which extracts the Final Address and the Originator Address
  * from the 6LoWPAN packet.
- * \param origAddr Pointer where to copy the link-layer address
- * \param finalAddr Pointer where to copy the link-layer address
+ * \param ptr_to_packet
+ * \param hopLimit Pointer to an integer that will store the hop limit field
+ * \param finalAddr Pointer where to copy the final MAC address
+ * \param finalAddrDim Pointer to an integer that will store size of final address
+ * \param origAddr Pointer where to copy the originator MAC address
+ * \param origAddrDim Pointer to an integer that will store size of originator address
  * \return An integer equals to -1 if some error occurs, if the parameter is NULL
  * or if the packet has not the Mesh Header.
  */
-uint8_t readMeshHeader(uint8_t* ptr_to_packet, linkaddr_t* finalAddr, linkaddr_t* origAddr);
+uint8_t parseMeshHeader(uint8_t* ptr_to_packet, uint8_t* hopLimit, 
+        linkaddr_t* finalAddr, uint8_t* finalAddrDim, 
+        linkaddr_t* origAddr, uint8_t* origAddrDim);
 
 void setFinalAddr(linkaddr_t* finalAddr);
 
