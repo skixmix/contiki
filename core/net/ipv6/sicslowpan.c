@@ -708,14 +708,11 @@ void insertMeshHeader(){
     //Set the dispatch type equal to the Mesh one
     dispatch = SICSLOWPAN_DISPATCH_MESH;
     
-    
-
     //TODO: the standard impose that if Hop Limit field is uqual to 1111, there 
     //must be a subsequent byte that specifies the actual Hop Limit
     
     //Set the Hop Limit field equal to the maximum (TODO: handle different values)
     dispatch |= MESH_DEFAULT_HL;
-    
     
     //Extract the L2 final address from the IP destination address
     extractIidFromIpAddr(&finalAddress, &UIP_IP_BUF->destipaddr, &addrDim);
@@ -748,9 +745,9 @@ void insertMeshHeader(){
         //(it means final address on 16 bits and orig. address on 64 bits)
         SET_BIT(dispatch,MESH_V_FLAG);
         //Copy the final MAC address into the Mesh Header 
-        memcpy((packetbuf_ptr + MESH_FINAL_ADDR), finalAddress.u8 + 6, 2);
+        memcpy(packetbuf_ptr + MESH_FINAL_ADDR, finalAddress.u8 + 6, 2);
         //Copy the originator MAC address into the Mesh Header
-        memcpy((packetbuf_ptr + 1 + 2), linkaddr_node_addr.u8, LINKADDR_SIZE);
+        memcpy(packetbuf_ptr + MESH_ORIGINATOR_ADDR(BIT_IS_SET(dispatch, MESH_F_FLAG)), linkaddr_node_addr.u8, LINKADDR_SIZE);
         
     }
     //Set the dispatch type into the packet
@@ -759,8 +756,7 @@ void insertMeshHeader(){
 }
 
 void meshUnderOrRouteOver(){
-    if(ipRouteOverListContains(&UIP_IP_BUF->destipaddr) == 1){
-        //ROUTE OVER -> do nothing
+    if(ipRouteOverListContains(&UIP_IP_BUF->destipaddr) == 1){ //ROUTE OVER -> do nothing
         /*
         PRINTF("Route over:");
         PRINT6ADDR(&UIP_IP_BUF->destipaddr);
@@ -768,8 +764,7 @@ void meshUnderOrRouteOver(){
         */
         return;
     }
-    else{
-        //MESH UNDER -> insert the Mesh Header
+    else{ //MESH UNDER -> insert the Mesh Header
         insertMeshHeader();
         return;
     }
@@ -1388,6 +1383,7 @@ uncompress_hdr_iphc(uint8_t *buf, uint16_t ip_len)
 #endif /* SICSLOWPAN_COMPRESSION == SICSLOWPAN_COMPRESSION_HC06 */
 
 /**
+ * TODO: alleggerire il codice per andare ad estrarre SOLO l'indirizzo IP di destinazione
  * Function which extracts the IPv6 destination address from the 6LoWPAN packet.
  * It takes care of possible header compression.
  * \param destAddr Pointer where to copy the IPv6 address
