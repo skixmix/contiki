@@ -1407,9 +1407,6 @@ int readIPaddr(uip_ipaddr_t* destAddr){
     uint8_t first_fragment = 0, last_fragment = 0;
 #endif /*SICSLOWPAN_CONF_FRAG*/
 
-    /* Update link statistics */
-//TODO: da spostare nel modulo SDN perchè altrimenti le statistiche potrebbero essere falsate
-    link_stats_input_callback(packetbuf_addr(PACKETBUF_ADDR_SENDER));
 
     /* init */
     uncomp_hdr_len = 0;
@@ -1969,9 +1966,6 @@ input(void)
   uint8_t first_fragment = 0, last_fragment = 0;
 #endif /*SICSLOWPAN_CONF_FRAG*/
 
-  /* Update link statistics */
-//TODO: da spostare nel modulo SDN perchè altrimenti le statistiche potrebbero essere falsate
-  link_stats_input_callback(packetbuf_addr(PACKETBUF_ADDR_SENDER));
 
   /* init */
   uncomp_hdr_len = 0;

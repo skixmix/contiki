@@ -113,6 +113,8 @@ input(void)
     PRINTADDR(source);
     
     /*------------------------------Logic------------------------------*/
+    //Update link statistics
+    link_stats_input_callback(packetbuf_addr(PACKETBUF_ADDR_SENDER));
     
     //Check if the packet has Mesh Header    
     if(pktHasMeshHeader(ptr) == 1){
