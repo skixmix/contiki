@@ -9,6 +9,7 @@
 #ifndef INTERCEPTOR_H_
 #define INTERCEPTOR_H_
 
+#include "net/mac/mac.h"
 
 /**
  * The structure of an interceptor driver.
