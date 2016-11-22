@@ -8,13 +8,7 @@
 
 #include "flowtable.h"
 
-#define DEBUG 1
-#if DEBUG && (!SINK || DEBUG_SINK)
-#include <stdio.h>
-#define PRINTF(...) printf(__VA_ARGS__)
-#else
-#define PRINTF(...)
-#endif
+
 
 LIST(flowtable);
 MEMB(entries_memb, entry_t, MAX_NUM_ENTRIES);
@@ -24,7 +18,7 @@ MEMB(bytes2_memb, bytes2_t, NUM_BYTES_2_BLOCKS);
 MEMB(bytes4_memb, bytes4_t, NUM_BYTES_4_BLOCKS);
 MEMB(bytes8_memb, bytes8_t, NUM_BYTES_8_BLOCKS);
 MEMB(bytes16_memb, bytes16_t, NUM_BYTES_16_BLOCKS);
-uint8_t status_register[STATUS_REGISTER_SIZE];
+
 
 uint8_t clean_up_oldest_entry(){
     //TODO: find the oldest flow table entry and clean up its space
@@ -129,6 +123,7 @@ action_t* create_action(action_type_t type, field_t field, uint8_t offset, uint8
 
 rule_t* create_rule(field_t field, uint8_t offset, uint8_t size, operator_t operator, uint8_t* value){
     rule_t *r;
+    uint8_t dim;
     if(size < 0 || size > 128 || offset < 0 || offset > 128){
         PRINTF("[FLT]: Failed to create a rule bacause of invalid parameters\n");
         return NULL;
@@ -143,25 +138,27 @@ rule_t* create_rule(field_t field, uint8_t offset, uint8_t size, operator_t oper
     r->size = size;
     r->operator = operator;
     
-    if(size <= 8){
+    dim = size + offset;
+    
+    if(dim <= 8){
         r->value.byte = *value; 
     }
-    else if(size > 8 && size <= 16){
+    else if(dim > 8 && dim <= 16){
         r->value.bytes = memb_alloc(&bytes2_memb);
         memset(r->value.bytes, 0, sizeof(*r->value.bytes));
         memcpy(r->value.bytes, value, 2);
     }
-    else if(size > 16 && size <= 32){
+    else if(dim > 16 && dim <= 32){
         r->value.bytes = memb_alloc(&bytes4_memb);
         memset(r->value.bytes, 0, sizeof(*r->value.bytes));
         memcpy(r->value.bytes, value, 4);
     }
-    else if(size > 32 && size <= 64){
+    else if(dim > 32 && dim <= 64){
         r->value.bytes = memb_alloc(&bytes8_memb);
         memset(r->value.bytes, 0, sizeof(*r->value.bytes));
         memcpy(r->value.bytes, value, 8);
     }
-    else if(size > 64 && size <= 128){
+    else if(dim > 64 && dim <= 128){
         r->value.bytes = memb_alloc(&bytes16_memb);
         memset(r->value.bytes, 0, sizeof(*r->value.bytes));
         memcpy(r->value.bytes, value, 16);
@@ -263,9 +260,16 @@ void print_action(action_t* a){
     PRINTF("OFFSET: %u ", a->offset);
     PRINTF("SIZE: %u ", a->size);
     if(a->size <= 8)
-        PRINTF("VALUE: %c ", (char)a->value.byte);
-    else
-        PRINTF("VALUE: %s ", a->value.bytes);
+        PRINTF("VALUE: %x ", (char)a->value.byte);
+    else{
+        int i, dim;
+        dim = ((a->size + a->offset) / 8);
+        if((a->size + a->offset) % 8 > 0)
+            dim += 1;
+        PRINTF("VALUE: ");
+        for(i = 0; i < dim; i++)
+            PRINTF("%02x", a->value.bytes[i]);
+    }
 }
 
 void print_rule(rule_t* r){
@@ -305,9 +309,16 @@ void print_rule(rule_t* r){
     PRINTF("OFFSET: %u ", r->offset);
     PRINTF("SIZE: %u ", r->size);
     if(r->size <= 8)
-        PRINTF("VALUE: %c ", (char)r->value.byte);
-    else
-        PRINTF("VALUE: %s ", r->value.bytes);
+        PRINTF("VALUE: %x ", (char)r->value.byte);
+    else{
+        int i, dim;
+        dim = ((r->size + r->offset) / 8);
+        if((r->size + r->offset) % 8 > 0)
+            dim += 1;
+        PRINTF("VALUE: ");
+        for(i = 0; i < dim; i++)
+            PRINTF("%02x", r->value.bytes[i]);
+    }
 }
 
 void print_entry(entry_t* e) {
@@ -335,24 +346,37 @@ void print_flowtable() {
     }
 }
 
+entry_t* getFlowTableHead(){
+    return list_head(flowtable);
+}
+
 void flowtable_test(){
     flowtable_init();
-    rule_t* rule2;
-    rule_t* rule = create_rule(MH_DST_ADDR, 0, 64, EQUAL, "feff001");
-    action_t* action= create_action(FORWARD, NO_FIELD, 0, 64, "feff002");
-    entry_t* entry = create_entry(1);
-    rule = create_rule(SICSLO_DISPATCH, 0, 8, EQUAL, "c");
-    action= create_action(MODIFY, SICSLO_DISPATCH, 0, 8, "b");
-    add_rule_to_entry(entry, rule);    
-    add_action_to_entry(entry, action);
-    add_entry_to_ft(entry);
+    uint8_t addr_1[8]  = {0xc1, 0x0c, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01};
+    uint8_t addr_2[8]  = {0xc1, 0x0c, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02};
+    uint8_t addr_3[8]  = {0xc1, 0x0c, 0x00, 0x00, 0x00, 0x00, 0x00, 0x03};
+    uint8_t addr_4[8]  = {0xc1, 0x0c, 0x00, 0x00, 0x00, 0x00, 0x00, 0x04};
+    rule_t* rule;
+    action_t* action;
+    entry_t* entry;
+    if(memcmp(&linkaddr_node_addr, addr_2, 8) == 0){
+        rule = create_rule(MH_DST_ADDR, 0, 64, EQUAL, addr_1);
+        action= create_action(FORWARD, NO_FIELD, 0, 64, addr_3);
+    }
     
-    entry = create_entry(2);
-    rule = create_rule(SICSLO_IPHC, 0, 16, EQUAL, "ca");
-    rule2 = create_rule(MH_DST_ADDR, 0, 8, EQUAL, "t");    
-    action= create_action(MODIFY, SICSLO_IPHC, 3, 32, "34ca");
-    add_rule_to_entry(entry, rule);
-    add_rule_to_entry(entry, rule2);     
+    if(memcmp(&linkaddr_node_addr, addr_3, 8) == 0){
+        rule = create_rule(MH_DST_ADDR, 0, 64, EQUAL, addr_1);
+        action= create_action(FORWARD, NO_FIELD, 0, 64, addr_4);
+    }
+    
+    if(memcmp(&linkaddr_node_addr, addr_4, 8) == 0){
+        rule = create_rule(MH_DST_ADDR, 0, 64, EQUAL, addr_1);
+        action= create_action(FORWARD, NO_FIELD, 0, 64, addr_1);
+    }
+        
+    
+    entry = create_entry(1);
+    add_rule_to_entry(entry, rule);    
     add_action_to_entry(entry, action);
     add_entry_to_ft(entry);
     

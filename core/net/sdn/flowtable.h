@@ -10,12 +10,20 @@
 
 #include "lib/memb.h"
 #include "lib/list.h"
+#include "net/linkaddr.h"
 #include <stdio.h>
 #include <string.h>
 
+#define DEBUG 1
+#if DEBUG && (!SINK || DEBUG_SINK)
+#include <stdio.h>
+#define PRINTF(...) printf(__VA_ARGS__)
+#else
+#define PRINTF(...)
+#endif
+
 /*-------------------------Constants definition-------------------------------*/
 
-#define STATUS_REGISTER_SIZE    50
 #define MAX_NUM_ENTRIES         10
 #define MAX_NUM_RULES           20
 #define MAX_NUM_ACTIONS         20
@@ -129,12 +137,16 @@ entry_t* allocate_entry();
 action_t* allocate_action();
 rule_t* allocate_rule();
 void print_flowtable();
+void print_action(action_t* a);
+void print_entry(entry_t* e);
+void print_rule(rule_t* r);
 entry_t* create_entry(uint16_t priority);
 uint8_t add_rule_to_entry(entry_t* entry, rule_t* rule);
 uint8_t add_action_to_entry(entry_t* entry, action_t* action);
 uint8_t add_entry_to_ft(entry_t* entry);
 rule_t* create_rule(field_t field, uint8_t offset, uint8_t size, operator_t operator, uint8_t* value);
 action_t* create_action(action_type_t type, field_t field, uint8_t offset, uint8_t size, uint8_t* value);
+entry_t* getFlowTableHead();
 void flowtable_test();
 #endif	/* FLOWTABLE_H */
 
