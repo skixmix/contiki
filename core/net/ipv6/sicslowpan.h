@@ -51,6 +51,7 @@
 
 #include "net/ip/uip.h"
 #include "net/mac/mac.h"
+#include "net/linkaddr.h"
 
 /**
  * \name General sicslowpan defines

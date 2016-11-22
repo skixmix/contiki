@@ -604,9 +604,12 @@ compress_addr_64(uint8_t bitpos, uip_ipaddr_t *ipaddr, uip_lladdr_t *lladdr)
 #define MESH_F_FLAG                 4
 #define MESH_DEFAULT_HL             0x0e    /* xxxx1110 */
 uip_ipaddr_t routeOverAddrList[MAX_NUM_ROUTE_OVER_ADDRS];
+linkaddr_t* mesh_src;
+MEMB(linkaddr_memb, linkaddr_t, 1);
 
 void inline print_ll_addr(uint8_t* addr){ 
-    printf(" %02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x ", addr[0], addr[1], addr[2], addr[3], addr[4], addr[5], addr[6], addr[7]);
+    if(addr != NULL)
+        printf(" %02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x ", addr[0], addr[1], addr[2], addr[3], addr[4], addr[5], addr[6], addr[7]);
 }
 
 int ipRouteOverListContains(uip_ipaddr_t* ipAddr){
@@ -660,14 +663,14 @@ uint8_t parseMeshHeader(uint8_t* ptr_to_packet, uint8_t* hopLimit,
     /*----------Parse the Final Address-----------*/
     if(BIT_IS_SET(*ptr, MESH_F_FLAG)){  //64-bit long final address
         if(finalAddr != NULL)  
-            memcpy(finalAddr->u8, ptr + MESH_FINAL_ADDR, LINKADDR_SIZE);
+            memcpy(finalAddr, ptr + MESH_FINAL_ADDR, LINKADDR_SIZE);
         if(finalAddrDim != NULL)
             *finalAddrDim = LINKADDR_SIZE;
         meshHeaderSize += LINKADDR_SIZE;
     }
     else{                               //16-bit long final address
         if(finalAddr != NULL) 
-            memcpy(finalAddr->u8 + 6, ptr + MESH_FINAL_ADDR, 2);
+            memcpy(finalAddr + 6, ptr + MESH_FINAL_ADDR, 2);
         meshHeaderSize += 2;
         if(finalAddrDim != NULL)
             *finalAddrDim = 2;
@@ -675,19 +678,18 @@ uint8_t parseMeshHeader(uint8_t* ptr_to_packet, uint8_t* hopLimit,
     /*----------Parse the Originator Address-----------*/
     if(BIT_IS_SET(*ptr, MESH_V_FLAG)){  //64-bit long originator address
         if(origAddr != NULL) 
-            memcpy(origAddr->u8, ptr + MESH_ORIGINATOR_ADDR(BIT_IS_SET(*ptr, MESH_F_FLAG)), LINKADDR_SIZE);
+            memcpy(origAddr, ptr + MESH_ORIGINATOR_ADDR(BIT_IS_SET(*ptr, MESH_F_FLAG)), LINKADDR_SIZE);
         meshHeaderSize += LINKADDR_SIZE;
         if(origAddrDim != NULL)
             *origAddrDim = LINKADDR_SIZE;
     }
     else{                               //16-bit long originator address
         if(origAddr != NULL) 
-            memcpy(origAddr->u8 + 6, ptr + MESH_ORIGINATOR_ADDR(BIT_IS_SET(*ptr, MESH_F_FLAG)), 2);
+            memcpy(origAddr + 6, ptr + MESH_ORIGINATOR_ADDR(BIT_IS_SET(*ptr, MESH_F_FLAG)), 2);
         meshHeaderSize += 2;
         if(origAddrDim != NULL)
             *origAddrDim = 2;
     }
-    
     
     return meshHeaderSize;
 }
@@ -1220,7 +1222,16 @@ uncompress_hdr_iphc(uint8_t *buf, uint16_t ip_len)
 
   /* put the source address compression mode SAM in the tmp var */
   tmp = ((iphc1 & SICSLOWPAN_IPHC_SAM_11) >> SICSLOWPAN_IPHC_SAM_BIT) & 0x03;
-
+  
+  //DEBUG
+  printf("Mesh source: ");
+  print_ll_addr(mesh_src);
+  printf("15.4 source: ");
+  print_ll_addr(packetbuf_addr(PACKETBUF_ADDR_SENDER));
+  printf("\n");
+  
+  //DEBUG
+  
   /* context based compression */
   if(iphc1 & SICSLOWPAN_IPHC_SAC) {
     uint8_t sci = (iphc1 & SICSLOWPAN_IPHC_CID) ?
@@ -1234,14 +1245,40 @@ uncompress_hdr_iphc(uint8_t *buf, uint16_t ip_len)
         return;
       }
     }
+#if NETSTACK_CONF_SDN == 1
+    /* if tmp == 0 we do not have a context and therefore no prefix */
+    if(mesh_src == NULL){   //If there's no mesh header, use the L2 sender address to uncompress
+        uncompress_addr(&SICSLOWPAN_IP_BUF(buf)->srcipaddr,
+                        tmp != 0 ? context->prefix : NULL, unc_ctxconf[tmp],
+                        (uip_lladdr_t *)packetbuf_addr(PACKETBUF_ADDR_SENDER));
+    }
+    else{                   //If instead there is, use the source mesh address to decompress
+        uncompress_addr(&SICSLOWPAN_IP_BUF(buf)->srcipaddr,
+                        tmp != 0 ? context->prefix : NULL, unc_ctxconf[tmp],
+                        (uip_lladdr_t *)mesh_src);
+    }
+#else
     /* if tmp == 0 we do not have a context and therefore no prefix */
     uncompress_addr(&SICSLOWPAN_IP_BUF(buf)->srcipaddr,
                     tmp != 0 ? context->prefix : NULL, unc_ctxconf[tmp],
                     (uip_lladdr_t *)packetbuf_addr(PACKETBUF_ADDR_SENDER));
+#endif
   } else {
+#if NETSTACK_CONF_SDN == 1
+    /* no compression and link local */
+    if(mesh_src == NULL){   //If there's no mesh header, use the L2 sender address to uncompress
+        uncompress_addr(&SICSLOWPAN_IP_BUF(buf)->srcipaddr, llprefix, unc_llconf[tmp],
+                        (uip_lladdr_t *)packetbuf_addr(PACKETBUF_ADDR_SENDER));
+    }
+    else{                   //If instead there is, use the source mesh address to decompress
+        uncompress_addr(&SICSLOWPAN_IP_BUF(buf)->srcipaddr, llprefix, unc_llconf[tmp],
+                        (uip_lladdr_t *)mesh_src);
+    }
+#else
     /* no compression and link local */
     uncompress_addr(&SICSLOWPAN_IP_BUF(buf)->srcipaddr, llprefix, unc_llconf[tmp],
                     (uip_lladdr_t *)packetbuf_addr(PACKETBUF_ADDR_SENDER));
+#endif
   }
 
   /* Destination address */
@@ -1413,8 +1450,8 @@ int readIPaddr(uip_ipaddr_t* destAddr){
     packetbuf_hdr_len = 0;
 
     /* The MAC puts the 15.4 payload inside the packetbuf data buffer */
+    //packetbuf_ptr = packetbuf_dataptr();
     packetbuf_ptr = packetbuf_dataptr();
-
     /* This is default uip_buf since we assume that this is not fragmented */
     buffer = (uint8_t *)UIP_IP_BUF;
 
@@ -1423,9 +1460,13 @@ int readIPaddr(uip_ipaddr_t* destAddr){
     last_rssi = (signed short)packetbuf_attr(PACKETBUF_ATTR_RSSI);
 
 #if SICSLOWPAN_CONF_FRAG
-
+    if(mesh_src != NULL){
+        memb_free(&linkaddr_memb, mesh_src);
+        mesh_src = NULL;
+    }
     if(pktHasMeshHeader(NULL)){
-        packetbuf_hdr_len += parseMeshHeader(NULL, NULL, NULL, NULL, NULL, NULL);
+        mesh_src = memb_alloc(&linkaddr_memb);
+        packetbuf_hdr_len += parseMeshHeader(NULL, NULL, NULL, NULL, mesh_src, NULL);
     }
     
     /*
@@ -1620,6 +1661,13 @@ my_copypayload:
 #if SICSLOWPAN_CONF_FRAG
     }
 #endif /* SICSLOWPAN_CONF_FRAG */
+    //DEBUG
+    printf("ReadIP: Dst: ");
+    uip_debug_ipaddr_print(&UIP_IP_BUF->destipaddr);
+    printf(" Src: ");
+    uip_debug_ipaddr_print(&UIP_IP_BUF->srcipaddr);
+    printf("\n");
+    //DEBUG
     memcpy(destAddr, &UIP_IP_BUF->destipaddr, sizeof(uip_ipaddr_t));
     return 1;
 }
@@ -1836,10 +1884,10 @@ output(const uip_lladdr_t *localdest)
           ((SICSLOWPAN_DISPATCH_FRAG1 << 8) | uip_len));
     frag_tag = my_tag++;
     SET16(PACKETBUF_FRAG_PTR, PACKETBUF_FRAG_TAG, frag_tag);
-
+#if NETSTACK_CONF_SDN == 1
     //Check if this packet needs the Mesh Header or not   
     meshUnderOrRouteOver();
-    
+#endif
     /* Copy payload and send */
     packetbuf_hdr_len += SICSLOWPAN_FRAG1_HDR_LEN;
     packetbuf_payload_len = (max_payload - packetbuf_hdr_len) & 0xfffffff8;
@@ -1883,8 +1931,10 @@ output(const uip_lladdr_t *localdest)
       PRINTFO("sicslowpan output: fragment ");
       PACKETBUF_FRAG_PTR[PACKETBUF_FRAG_OFFSET] = processed_ip_out_len >> 3;
       
-      //Check if this packet needs the Mesh Header or not   
-      meshUnderOrRouteOver();
+#if NETSTACK_CONF_SDN == 1
+    //Check if this packet needs the Mesh Header or not   
+    meshUnderOrRouteOver();
+#endif
       
       /* Copy payload and send */
       if(uip_len - processed_ip_out_len < packetbuf_payload_len) {
@@ -1921,8 +1971,10 @@ output(const uip_lladdr_t *localdest)
 #endif /* SICSLOWPAN_CONF_FRAG */
   } else {
       
+#if NETSTACK_CONF_SDN == 1
     //Check if this packet needs the Mesh Header or not   
     meshUnderOrRouteOver();
+#endif
     
     /*
      * The packet does not need to be fragmented
@@ -1966,7 +2018,10 @@ input(void)
   uint8_t first_fragment = 0, last_fragment = 0;
 #endif /*SICSLOWPAN_CONF_FRAG*/
 
-
+#if NETSTACK_CONF_SDN == 0
+  /* Update link statistics */		
+  link_stats_input_callback(packetbuf_addr(PACKETBUF_ADDR_SENDER));
+#endif
   /* init */
   uncomp_hdr_len = 0;
   packetbuf_hdr_len = 0;
@@ -1985,12 +2040,18 @@ input(void)
 
   PRINTF("READ MESH DISPATCH: %02x %02x\n", *(packetbuf_ptr), *(packetbuf_ptr+1));
   
+#if NETSTACK_CONF_SDN == 1  
+  if(mesh_src != NULL){
+      memb_free(&linkaddr_memb, mesh_src);
+      mesh_src = NULL;
+  }
   //Check for Mesh Header
   if(pktHasMeshHeader(NULL)){
-      //Just ignore it
-      packetbuf_hdr_len += parseMeshHeader(NULL, NULL, NULL, NULL, NULL, NULL);
+      mesh_src = memb_alloc(&linkaddr_memb);
+      //Just take the originator address for uncompression purpose
+      packetbuf_hdr_len += parseMeshHeader(NULL, NULL, NULL, NULL, mesh_src, NULL);
   }
-  
+#endif
   /*
    * Since we don't support the mesh and broadcast header, the first header
    * we look for is the fragmentation header
@@ -2180,6 +2241,14 @@ input(void)
       callback->input_callback();
     }
 
+    //DEBUG
+    printf("Input: Dst: ");
+    uip_debug_ipaddr_print(&UIP_IP_BUF->destipaddr);
+    printf(" Src: ");
+    uip_debug_ipaddr_print(&UIP_IP_BUF->srcipaddr);
+    printf("\n");
+    //DEBUG
+            
     tcpip_input();
 #if SICSLOWPAN_CONF_FRAG
   }
@@ -2246,6 +2315,7 @@ sicslowpan_init(void)
   
   /*-----------------------------6LoWPAN SDN----------------------------------*/
   uip_ip6addr(&routeOverAddrList[0], 0xff02, 0, 0, 0, 0, 0, 0, 0x001a);
+  memb_init(&linkaddr_memb);
 }
 /*--------------------------------------------------------------------*/
 int
