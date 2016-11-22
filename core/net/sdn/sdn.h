@@ -19,13 +19,12 @@ typedef enum {
 } RPLconfig;
 
 /**
- * Function called by the Flow Table module thanks to which it can forward a 
- * packet to the MAC layer or the 6LoWPAN layer.
- * \param nextLayer Integer which specifies where the packet has to be sent
+ * Function called by the Datapath module thanks to which it can forward a 
+ * packet to the MAC layer.
  * \return An integer equals to -1 if some error occurs or if the parameter is 
  * not valid
  */
-int forward(uint8_t nextLayer);
+int forward();
 
 #endif /* SDN_H_ */
 

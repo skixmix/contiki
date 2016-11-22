@@ -138,7 +138,7 @@ input(void)
         //Check if it is a mesh multicast address
         if(meshAddrIsMulticast(&finalAddr, finalAddrDim) == 1){
             //If so, first thing to do is to process it using the flow table
-            
+            matchPacket();
             /*
              * NOTE: the flow table could (and likely will) modify the packet.
              * Thus, if it turns out that the packet must be sent ALSO 
@@ -156,11 +156,12 @@ input(void)
             //Check if this packet is addressed to me
             if(meshAddrListContains(&finalAddr) == 1){
                 //This packet must be sent to the upper layer
+                printf("Packet forwarded to 6LoWPAN layer\n");
                 NETSTACK_NETWORK.input();
             }
             else{
                 //Otherwise it must be handled by the Flow Table
-
+                matchPacket();
                 /*
                 const linkaddr_t fixed = {0xc1, 0x0c, 0x00, 0x00, 0x00, 0x00, 0x00, 0x03};
                 const linkaddr_t new_dest = {0xc1, 0x0c, 0x00, 0x00, 0x00, 0x00, 0x00, 0x04};
@@ -176,14 +177,12 @@ input(void)
         }
     }
     else{
-        
+                
         //Read the Destination Address from the IPv6 Header
         res = readIPaddr(&ipAddr);
         //DEBUG
         printf(" IP: ");
-        res = readIPaddr(&ipAddr);
-        if(res != -1)
-            uip_debug_ipaddr_print(&ipAddr);
+        uip_debug_ipaddr_print(&ipAddr);
         //DEBUG
         if(res == -1){
             //Something went wrong, drop the packet
@@ -201,13 +200,14 @@ input(void)
             }
             else{
                 //Otherwise handle it with the Flow Table
+                matchPacket();
             }
         }
         else{
             //Check if it is a multicast address
             if(uip_is_addr_mcast(&ipAddr) == 1){
                 //If so, first thing to do is to process the packet with the Flow Table
-                
+                matchPacket();
                 /*
                 * NOTE: the flow table could (and likely will) modify the packet.
                 * Thus, if it turns out that the packet must be sent ALSO 
@@ -232,6 +232,7 @@ input(void)
                 }
                 else{
                     //Otherwise it must be handled by the Flow Table
+                    matchPacket();
                 }
             }
         }    
@@ -273,7 +274,7 @@ send(mac_callback_t sent, void *ptr)
     //DEBUG
     
     /*------------------------------Logic------------------------------*/
-    
+        
     //Read the IPv6 destination address
     res = readIPaddr(&ipAddr);
     if(res == -1){
@@ -291,11 +292,18 @@ send(mac_callback_t sent, void *ptr)
         }
         else{
             //Otherwise handle the packet using the Flow Table
+            matchPacket();
         }
     }
     else{
         //Otherwise handle the packet using the Flow Table
+        matchPacket();
     }
+}
+
+int forward(){
+    NETSTACK_LLSEC.send(NULL, NULL);
+    return 1;
 }
 
 const struct interceptor_driver sdn_driver = {
@@ -306,7 +314,3 @@ const struct interceptor_driver sdn_driver = {
 };
 
 
-
-int forward(uint8_t nextLayer){
-    return -1;
-}
