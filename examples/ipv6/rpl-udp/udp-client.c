@@ -196,7 +196,9 @@ set_global_address(void)
 /* Mode 3 - derived from server link-local (MAC) address */
   uip_ip6addr(&server_ipaddr, UIP_DS6_DEFAULT_PREFIX, 0, 0, 0, 0xc30c, 0, 0, 0x0001); //redbee-econotag
 #endif
+#if NETSTACK_CONF_SDN == 1
   flowtable_test();
+#endif
 }
 /*---------------------------------------------------------------------------*/
 PROCESS_THREAD(udp_client_process, ev, data)
