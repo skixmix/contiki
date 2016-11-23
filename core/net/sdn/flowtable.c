@@ -455,8 +455,8 @@ entry_t* find_entry(entry_t* entry_to_match){
                                     //thus, we have found the right entry
     }
     if(entry == NULL)               //If the loop reached the end of the flow table
-        return 0;                   //it means that there's no entry which has matched
-    return 1;
+        return NULL;                   //it means that there's no entry which has matched
+    return entry;
 }
 
 void flowtable_test(){
