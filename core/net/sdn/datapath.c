@@ -44,7 +44,7 @@ uint8_t getField(field_t field, uint8_t* copy_buffer, uint8_t* buf_occupation){
 
 uint8_t applyMask(uint8_t size, uint8_t offset, uint8_t* copy_buffer, uint8_t buf_occupation){
     uint8_t first_byte, last_byte;
-    uint8_t i;
+    uint8_t i, j;
     first_byte = offset / 8;
     last_byte = (size + offset) / 8;
     //Offset and size are mesured in number of bits
@@ -54,7 +54,7 @@ uint8_t applyMask(uint8_t size, uint8_t offset, uint8_t* copy_buffer, uint8_t bu
     if(last_byte > buf_occupation)
         //It's trying to access a portion of the buffer which has no meaning
         return 0;
-    if(last_byte == buf_occupation && size % 8 != 0)
+    if(last_byte == buf_occupation && (size + offset) % 8 != 0)
         //It's trying to access a portion of the buffer which has no meaning
         return 0;
     
@@ -65,6 +65,12 @@ uint8_t applyMask(uint8_t size, uint8_t offset, uint8_t* copy_buffer, uint8_t bu
             copy_buffer[i] = 0;
         else if(i > last_byte)
             copy_buffer[i] = 0;
+    }
+    
+    j = 0;
+    for(i = first_byte; i <= last_byte; i++){
+        copy_buffer[j] = copy_buffer[i];
+	j++;
     }
     return 1;
 }
@@ -77,16 +83,25 @@ uint8_t evaluateRule(rule_t* rule){
     
     if(rule == NULL)
         return 0;
-    dim = ((rule->size + rule->offset) / 8);
+    /*
+    
     if((rule->size + rule->offset) % 8 > 0)
+        dim += 1;
+    */
+    dim = rule->size  / 8;
+    if(rule->size % 8 > 0)
         dim += 1;
     
     res = getField(rule->field, copy_buffer, &buf_occupation);
-    if(res != 1)
+    if(res != 1){
+        printf("Datapath - evaluateRule: error in retrieving the filed\n");
         return 0;
+    }
     res = applyMask(rule->size, rule->offset, copy_buffer, buf_occupation);
-    if(res != 1)
+    if(res != 1){
+        printf("Datapath - applyMask: error in applying the mask\n");
         return 0;
+    }
     
     print_ll_addr(rule->value.bytes);
     printf("\n");
@@ -138,7 +153,6 @@ uint8_t forward_action(action_t* action){
     printf("\n");    
     
     packetbuf_set_addr(PACKETBUF_ADDR_RECEIVER, action->value.bytes);
-    packetbuf_set_addr(PACKETBUF_ADDR_SENDER,(void*)&uip_lladdr);   //TODO: remove it
     forward();
 }
 
@@ -147,7 +161,10 @@ uint8_t applyAction(action_t* action){
         case FORWARD:
             return forward_action(action);
             break;
-        case DROP: 
+        case DROP:
+            //TODO: deallocate the packet buffer?
+            //packetbuf_clear();
+            //TODO: Prevent any further action on this packet
             break;
         case MODIFY: 
             break;
@@ -192,6 +209,7 @@ int matchPacket(){
         //If we are here it means that all rules have been satisfied, so let's apply the actions
         for(action = list_head(entry->actions); action != NULL; action = action->next){
             result = applyAction(action);
+            //TODO: the packet could have been modified, we need a copy of the buffer
             if(action->type == CONTINUE)
                 continue_flag = 1;
         }
