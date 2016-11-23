@@ -29,8 +29,8 @@
 #define MAX_NUM_ACTIONS         20
 #define NUM_BYTES_2_BLOCKS      10
 #define NUM_BYTES_4_BLOCKS      10
-#define NUM_BYTES_8_BLOCKS      5
-#define NUM_BYTES_16_BLOCKS     2
+#define NUM_BYTES_8_BLOCKS      10
+#define NUM_BYTES_16_BLOCKS     5
 
 /*---------------------Flow Table data structures-----------------------------*/
 
