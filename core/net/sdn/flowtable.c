@@ -348,6 +348,117 @@ entry_t* getFlowTableHead(){
     return list_head(flowtable);
 }
 
+uint8_t compare_rules(rule_t* rule1, rule_t* rule2){
+    int dim, res;
+    if(rule1 == NULL || rule2 == NULL)
+        return 0;
+    if(rule1->offset == rule2->offset &&
+            rule1->size == rule2->size &&
+            rule1->operator == rule2->operator &&
+            rule1->field == rule2->field){
+        
+        dim = rule1->size / 8; 
+        if(rule1->size % 8 != 0)
+            dim += 1;
+        if(dim == 1)
+            res = memcmp(&rule1->value.byte, &rule2->value.byte, dim);
+        else
+            res = memcmp(rule1->value.bytes, rule2->value.bytes, dim);
+        if(res == 0)
+            return 1;
+    }
+    return 0;           
+}
+
+uint8_t compare_actions(action_t* action1, action_t* action2){
+    int dim, res;
+    if(action1 == NULL || action2 == NULL)
+        return 0;
+    if(action1->offset == action2->offset &&
+            action1->size == action2->size &&
+            action1->type == action2->type &&
+            action1->field == action2->field){
+        
+        dim = action1->size / 8; 
+        if(action1->size % 8 != 0)
+            dim += 1;
+        
+        if(dim == 1)
+            res = memcmp(&action1->value.byte, &action2->value.byte, dim);
+        else
+            res = memcmp(action1->value.bytes, action2->value.bytes, dim);
+        if(res == 0)
+            return 1;
+    }
+    return 0;           
+}
+
+entry_t* find_entry(entry_t* entry_to_match){
+    entry_t* entry = NULL;
+    rule_t* rule = NULL;
+    rule_t* action = NULL;
+    rule_t* rule_to_match = NULL;
+    rule_t* rule_list = NULL;
+    action_t* action_to_match = NULL;
+    action_t* action_list = NULL;
+    int num_rules;
+    int num_actions;
+    
+    if(entry_to_match == NULL)
+        return 0;
+    
+    rule_list = list_head(entry_to_match->rules);
+    num_rules = list_length(*entry_to_match->rules);
+    action_list = list_head(entry_to_match->actions);
+    num_actions = list_length(*entry_to_match->actions);
+    
+    //Search the entry with the same rules as the parameter
+    for(entry = list_head(flowtable); entry != NULL; entry = entry->next){
+        if(num_rules != list_length((list_t)*entry->rules))
+            continue;
+        //Initialize support pointers
+        rule_to_match = rule_list;
+        action_to_match = action_list;
+        
+        //For each rule
+        for(rule = list_head(entry->rules); rule != NULL; rule = rule->next){
+            
+            //Compare the two rules and see if they are equal
+            if(compare_rules(rule, rule_to_match) == 1){
+                printf("Rule match, go on\n");
+                //Match! Check the next rule
+                rule_to_match = rule_to_match->next;  
+            }
+            else
+                //No match, go to the next table entry
+                break;
+        }
+        if(rule != NULL)       //Premature exit from the loop means that at least one rule doesn't match
+            continue;
+        
+        //If we are here it means that all the rules are equal to the reference ones
+        //Now, check the actions
+        for(action = list_head(entry->actions); action != NULL; action = action->next){
+                       
+            //Compare the two rules and see if they are equal
+            if(compare_actions(action, action_to_match) == 1){
+                printf("Action match, go on\n");
+                //Match! Check the next rule
+                action_to_match = action_to_match->next;  
+            }
+            else
+                //No match, go to the next table entry
+                break;
+        }
+        if(action == NULL)          //If the loop reached the end of the actions list
+            break;                  //it means that every action has matched the reference ones
+                                    //thus, we have found the right entry
+    }
+    if(entry == NULL)               //If the loop reached the end of the flow table
+        return 0;                   //it means that there's no entry which has matched
+    return 1;
+}
+
 void flowtable_test(){
     flowtable_init();
     uint8_t addr_1[8]  = {0xc1, 0x0c, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01};
@@ -418,11 +529,7 @@ void flowtable_test(){
         add_rule_to_entry(entry, rule);    
         add_action_to_entry(entry, action);
         add_entry_to_ft(entry);
-    }
-        
-    
-    
-    
-    
+    }    
     print_flowtable();
 }
+

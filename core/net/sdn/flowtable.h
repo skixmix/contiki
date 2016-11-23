@@ -29,8 +29,8 @@
 #define MAX_NUM_ACTIONS         20
 #define NUM_BYTES_2_BLOCKS      10
 #define NUM_BYTES_4_BLOCKS      10
-#define NUM_BYTES_8_BLOCKS      10
-#define NUM_BYTES_16_BLOCKS     5
+#define NUM_BYTES_8_BLOCKS      20
+#define NUM_BYTES_16_BLOCKS     2
 
 /*---------------------Flow Table data structures-----------------------------*/
 
@@ -147,6 +147,7 @@ uint8_t add_entry_to_ft(entry_t* entry);
 rule_t* create_rule(field_t field, uint8_t offset, uint8_t size, operator_t operator, uint8_t* value);
 action_t* create_action(action_type_t type, field_t field, uint8_t offset, uint8_t size, uint8_t* value);
 entry_t* getFlowTableHead();
+entry_t* find_entry(entry_t* entry_to_match);
 void flowtable_test();
 #endif	/* FLOWTABLE_H */
 
