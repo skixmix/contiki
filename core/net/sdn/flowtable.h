@@ -148,6 +148,7 @@ rule_t* create_rule(field_t field, uint8_t offset, uint8_t size, operator_t oper
 action_t* create_action(action_type_t type, field_t field, uint8_t offset, uint8_t size, uint8_t* value);
 entry_t* getFlowTableHead();
 entry_t* find_entry(entry_t* entry_to_match);
+uint8_t remove_entry(entry_t* entry_to_match);
 void flowtable_test();
 #endif	/* FLOWTABLE_H */
 

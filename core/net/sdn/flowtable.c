@@ -81,6 +81,48 @@ rule_t* allocate_rule(){
     return r;
 }
 
+uint8_t* create_value_field(uint8_t size, uint8_t* value){
+    uint8_t* bytes;
+    if(size == 0)
+        return NULL;
+    
+    if(size > 8 && size <= 16){
+        bytes = memb_alloc(&bytes2_memb);
+        if(bytes == NULL) {
+            PRINTF("[FLT]: Failed to allocate the field value\n");
+            return NULL;
+        }   
+        memcpy(bytes, value, 2);
+    }
+    else if(size > 16 && size <= 32){
+        bytes = memb_alloc(&bytes4_memb);
+        if(bytes == NULL) {
+            PRINTF("[FLT]: Failed to allocate the field value\n");
+            return NULL;
+        }  
+        memcpy(bytes, value, 4);
+    }
+    else if(size > 32 && size <= 64){
+        bytes = memb_alloc(&bytes8_memb);
+        if(bytes == NULL) {
+            PRINTF("[FLT]: Failed to allocate the field value\n");
+            return NULL;
+        }  
+        memcpy(bytes, value, 8);
+    }
+    else if(size > 64 && size <= 128){
+        bytes = memb_alloc(&bytes16_memb);
+        if(bytes == NULL) {
+            PRINTF("[FLT]: Failed to allocate the field value\n");
+            return NULL;
+        }  
+        memcpy(bytes, value, 16);
+    }
+    
+    
+    
+}
+
 action_t* create_action(action_type_t type, field_t field, uint8_t offset, uint8_t size, uint8_t* value){
     action_t* a;
     if(size < 0 || size > 128 || offset < 0 || offset > 128){
@@ -103,21 +145,8 @@ action_t* create_action(action_type_t type, field_t field, uint8_t offset, uint8
     if(size <= 8){
         a->value.byte = *value;
     }
-    else if(size > 8 && size <= 16){
-        a->value.bytes = memb_alloc(&bytes2_memb);
-        memcpy(a->value.bytes, value, 2);
-    }
-    else if(size > 16 && size <= 32){
-        a->value.bytes = memb_alloc(&bytes4_memb);
-        memcpy(a->value.bytes, value, 4);
-    }
-    else if(size > 32 && size <= 64){
-        a->value.bytes = memb_alloc(&bytes8_memb);
-        memcpy(a->value.bytes, value, 8);
-    }
-    else if(size > 64 && size <= 128){
-        a->value.bytes = memb_alloc(&bytes16_memb);
-        memcpy(a->value.bytes, value, 16);
+    else{
+        a->value.bytes = create_value_field(size, value);
     }
     return a;
 }
@@ -145,23 +174,9 @@ rule_t* create_rule(field_t field, uint8_t offset, uint8_t size, operator_t oper
     if(dim <= 8){
         r->value.byte = *value; 
     }
-    else if(dim > 8 && dim <= 16){
-        r->value.bytes = memb_alloc(&bytes2_memb);
-        memcpy(r->value.bytes, value, 2);
-    }
-    else if(dim > 16 && dim <= 32){
-        r->value.bytes = memb_alloc(&bytes4_memb);
-        memcpy(r->value.bytes, value, 4);
-    }
-    else if(dim > 32 && dim <= 64){
-        r->value.bytes = memb_alloc(&bytes8_memb);
-        memcpy(r->value.bytes, value, 8);
-    }
-    else if(dim > 64 && dim <= 128){
-        r->value.bytes = memb_alloc(&bytes16_memb);
-        memcpy(r->value.bytes, value, 16);
-    }
-    
+    else{
+        r->value.bytes = create_value_field(size, value);
+    }    
     return r;
 }
 
@@ -396,7 +411,7 @@ uint8_t compare_actions(action_t* action1, action_t* action2){
 entry_t* find_entry(entry_t* entry_to_match){
     entry_t* entry = NULL;
     rule_t* rule = NULL;
-    rule_t* action = NULL;
+    action_t* action = NULL;
     rule_t* rule_to_match = NULL;
     rule_t* rule_list = NULL;
     action_t* action_to_match = NULL;
@@ -405,7 +420,7 @@ entry_t* find_entry(entry_t* entry_to_match){
     int num_actions;
     
     if(entry_to_match == NULL)
-        return 0;
+        return NULL;
     
     rule_list = list_head(entry_to_match->rules);
     num_rules = list_length(*entry_to_match->rules);
@@ -457,6 +472,72 @@ entry_t* find_entry(entry_t* entry_to_match){
     if(entry == NULL)               //If the loop reached the end of the flow table
         return NULL;                   //it means that there's no entry which has matched
     return entry;
+}
+
+void deallocate_value_field(value_t* value, uint8_t size){
+    if(size < 8 || value == NULL)
+        return;
+            
+    if(size > 8 && size <= 16){
+        memb_free(&bytes2_memb, value->bytes);
+    }
+    else if(size > 16 && size <= 32){
+        memb_free(&bytes4_memb, value->bytes);
+    }
+    else if(size > 32 && size <= 64){
+        memb_free(&bytes8_memb, value->bytes);
+    }
+    else if(size > 64 && size <= 128){
+        memb_free(&bytes16_memb, value->bytes);        
+    }
+}
+
+void deallocate_rule(rule_t* rule){
+    if(rule == NULL)
+        return;
+    deallocate_value_field(&rule->value, rule->size);
+    memb_free(&rules_memb, rule);
+}
+
+void deallocate_action(action_t* action){
+    if(action == NULL)
+        return;
+    deallocate_value_field(&action->value, action->size);
+    memb_free(&actions_memb, action);
+}
+
+void deallocate_entry(entry_t* entry){
+    rule_t* rule = NULL;
+    action_t* action = NULL;
+    if(entry == NULL)
+        return;
+    
+    rule = list_pop(entry->rules);
+    while(rule != NULL){
+        deallocate_rule(rule);
+        rule = list_pop(entry->rules);
+    }
+    
+    action = list_pop(entry->actions);
+    while(action != NULL){
+        deallocate_action(action);
+        action = list_pop(entry->actions);
+    }
+    memb_free(&entries_memb,entry);
+}
+
+uint8_t remove_entry(entry_t* entry_to_match){
+    entry_t* entry;
+    if(entry_to_match == NULL)
+        return 0;
+    
+    entry = find_entry(entry_to_match);
+    if(entry == NULL)
+        return 0;
+    
+    list_remove(flowtable, entry);
+    deallocate_entry(entry);
+    return 1;
 }
 
 void flowtable_test(){
