@@ -184,6 +184,10 @@ link_stats_input_callback(const linkaddr_t *lladdr)
     return;
   }
 
+  #ifdef SDN_CALLBACK_ADD_NEIGHBOR
+    SDN_CALLBACK_ADD_NEIGHBOR(lladdr);
+#endif /* SDN_CALLBACK_ADD_NEIGHBOR */
+  
   /* Update RSSI EWMA */
   stats->rssi = ((int32_t)stats->rssi * (EWMA_SCALE - EWMA_ALPHA) +
       (int32_t)packet_rssi * EWMA_ALPHA) / EWMA_SCALE;
