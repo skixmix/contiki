@@ -72,7 +72,7 @@ action_t* allocate_action(){
 }
 rule_t* allocate_rule(){
     rule_t *r;
-    r = memb_alloc(&actions_memb);
+    r = memb_alloc(&rules_memb);
     if(r == NULL) {
         PRINTF("[FLT]: Failed to allocate a rule\n");
         return NULL;
@@ -553,7 +553,7 @@ void flowtable_test(){
     entry_t* entry;
     
     
-    
+    /*
     if(memcmp(&linkaddr_node_addr, addr_2, 8) == 0){
         entry = create_entry(1);
         rule = create_rule(MH_DST_ADDR, 54, 10, EQUAL, addr_1 + 6);  //Last 10 bits of the 64-bit long MAC address
@@ -611,6 +611,7 @@ void flowtable_test(){
         add_action_to_entry(entry, action);
         add_entry_to_ft(entry);
     }    
+    */
     print_flowtable();
 }
 

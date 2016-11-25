@@ -149,6 +149,7 @@ action_t* create_action(action_type_t type, field_t field, uint8_t offset, uint8
 entry_t* getFlowTableHead();
 entry_t* find_entry(entry_t* entry_to_match);
 uint8_t remove_entry(entry_t* entry_to_match);
+void deallocate_entry(entry_t* entry);
 void flowtable_test();
 #endif	/* FLOWTABLE_H */
 
