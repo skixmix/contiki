@@ -59,7 +59,10 @@
 #define RPL_CONF_DEFAULT_LIFETIME        10
 
 #define RPL_CONF_DEFAULT_ROUTE_INFINITE_LIFETIME 1
-
+//ADDED
+#define RPL_CALLBACK_PARENT_SWITCH sdn_rpl_callback_parent_switch
+#define SDN_CALLBACK_ADD_NEIGHBOR sdn_callback_neighbor
+//ADDED
 #if WITH_NON_STORING
 #undef RPL_NS_CONF_LINK_NUM
 #define RPL_NS_CONF_LINK_NUM 40 /* Number of links maintained at the root. Can be set to 0 at non-root nodes. */
