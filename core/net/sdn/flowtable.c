@@ -352,6 +352,13 @@ void print_entry(entry_t* e) {
 
 void print_flowtable() {
     entry_t *e;
+    int i;
+    uint8_t dim;
+    uint8_t* status_register = getStatusRegisterPtr(&dim);
+    PRINTF("NODE STATE: ");
+    for(i = 0; i < dim; i++)
+            PRINTF("%02x", status_register[i]);
+    PRINTF("\n");
     for(e = list_head(flowtable); e != NULL; e = e->next) {
         PRINTF("[FLT]: ");
         print_entry(e);
@@ -440,7 +447,6 @@ entry_t* find_entry(entry_t* entry_to_match){
             
             //Compare the two rules and see if they are equal
             if(compare_rules(rule, rule_to_match) == 1){
-                printf("Rule match, go on\n");
                 //Match! Check the next rule
                 rule_to_match = rule_to_match->next;  
             }
@@ -457,7 +463,6 @@ entry_t* find_entry(entry_t* entry_to_match){
                        
             //Compare the two rules and see if they are equal
             if(compare_actions(action, action_to_match) == 1){
-                printf("Action match, go on\n");
                 //Match! Check the next rule
                 action_to_match = action_to_match->next;  
             }
@@ -551,6 +556,7 @@ void flowtable_test(){
     rule_t* rule;
     action_t* action;
     entry_t* entry;
+    uint8_t value = 3;
     
     
     /*
@@ -612,6 +618,30 @@ void flowtable_test(){
         add_entry_to_ft(entry);
     }    
     */
+    
+    if(memcmp(&linkaddr_node_addr, addr_6, 8) == 0){
+        entry = create_entry(1);
+        rule = create_rule(MH_DST_ADDR, 54, 10, EQUAL, addr_1 + 6);
+        add_rule_to_entry(entry, rule);   
+        action= create_action(MODIFY, NODE_STATE, 45, 2, &value);         
+        add_action_to_entry(entry, action);
+        add_entry_to_ft(entry);
+        
+        entry = create_entry(2);
+        rule = create_rule(NODE_STATE, 45, 2, EQUAL, &value);
+        add_rule_to_entry(entry, rule);   
+        action= create_action(MODIFY, NODE_STATE, 0, 64, addr_3);         
+        add_action_to_entry(entry, action);
+        add_entry_to_ft(entry);
+        
+        entry = create_entry(3);
+        rule = create_rule(NODE_STATE, 0, 64, EQUAL, addr_3);
+        add_rule_to_entry(entry, rule);   
+        action= create_action(MODIFY, NODE_STATE, 64, 64, addr_4);         
+        add_action_to_entry(entry, action);
+        add_entry_to_ft(entry);
+    }
+    
     print_flowtable();
 }
 
