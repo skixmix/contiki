@@ -33,6 +33,9 @@ linkaddr_t meshAddrList[MAX_NUM_MESH_ADDRS];    //Array of link-layer addresses 
 uip_ipaddr_t ipAddrList[MAX_NUM_IP_ADDRS];      //Array of ip-layer addresses (unicast and multicast) 
                                                 //which are associated with the node
 
+mac_callback_t sent_callback;
+void *ptr_copy;
+
 /*
  * Initialization function which is called during the bootstrap 
  */
@@ -99,17 +102,16 @@ static void
 input(void)
 {
     linkaddr_t* source;
-    linkaddr_t* dest;
     linkaddr_t finalAddr;
     uint8_t finalAddrDim;
     uip_ipaddr_t ipAddr;
     int res;
     uint8_t* ptr = packetbuf_dataptr();
-    
+    sent_callback == NULL;
+    ptr_copy = NULL;
     /*-------------------------------DEBUG--------------------------------*/
     printf("SDN: Packet received from: ");
     source = packetbuf_addr(PACKETBUF_ADDR_SENDER);
-    dest = packetbuf_addr(PACKETBUF_ADDR_RECEIVER);
     PRINTADDR(source);
     
     /*------------------------------Logic------------------------------*/
@@ -181,8 +183,9 @@ input(void)
         //Read the Destination Address from the IPv6 Header
         res = readIPaddr(&ipAddr);
         //DEBUG
-        printf(" IP: ");
+        printf("IP: ");
         uip_debug_ipaddr_print(&ipAddr);
+        printf("\n");
         //DEBUG
         if(res == -1){
             //Something went wrong, drop the packet
@@ -191,8 +194,6 @@ input(void)
         
         //Check if it is an RPL packet sent in multicast (all-rpl-nodes address)
         if(isRPLMulticast(&ipAddr) == 1){
-            printf(" RPL PKT!");
-            printf("\n");
             //If the configuration is RPL_BYPASS the RPL packet must 
             //be sent to the upper layer
             if(rpl_config == RPL_BYPASS){       
@@ -257,6 +258,8 @@ send(mac_callback_t sent, void *ptr)
     uip_ipaddr_t ipAddr;
     int res;
     
+    sent_callback = sent;
+    ptr_copy = ptr;
     //DEBUG
     if(pktHasMeshHeader(ptr_to_pkt)){
         dest = packetbuf_addr(PACKETBUF_ADDR_RECEIVER);
@@ -278,6 +281,7 @@ send(mac_callback_t sent, void *ptr)
     //Read the IPv6 destination address
     res = readIPaddr(&ipAddr);
     if(res == -1){
+        printf("SDN layer: Failed in reading the IP address");
         //Something went wrong, drop the packet
         return;
     }
@@ -302,7 +306,8 @@ send(mac_callback_t sent, void *ptr)
 }
 
 int forward(){
-    NETSTACK_LLSEC.send(NULL, NULL);
+    NETSTACK_LLSEC.send(sent_callback, ptr_copy);
+    //NETSTACK_MAC.send(NULL,NULL);
     return 1;
 }
 
