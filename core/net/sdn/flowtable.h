@@ -13,6 +13,7 @@
 #include "net/linkaddr.h"
 #include <stdio.h>
 #include <string.h>
+#include "net/sdn/datapath.h"
 
 #define DEBUG 1
 #if DEBUG && (!SINK || DEBUG_SINK)
@@ -25,11 +26,11 @@
 /*-------------------------Constants definition-------------------------------*/
 
 #define MAX_NUM_ENTRIES         10
-#define MAX_NUM_RULES           20
-#define MAX_NUM_ACTIONS         20
-#define NUM_BYTES_2_BLOCKS      10
-#define NUM_BYTES_4_BLOCKS      10
-#define NUM_BYTES_8_BLOCKS      20
+#define MAX_NUM_RULES           10
+#define MAX_NUM_ACTIONS         10
+#define NUM_BYTES_2_BLOCKS      4
+#define NUM_BYTES_4_BLOCKS      4
+#define NUM_BYTES_8_BLOCKS      10
 #define NUM_BYTES_16_BLOCKS     2
 
 /*---------------------Flow Table data structures-----------------------------*/
