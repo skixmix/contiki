@@ -8,7 +8,7 @@
 #ifndef DATAPATH_H
 #define	DATAPATH_H
 
-#define STATUS_REGISTER_SIZE    50
+#define STATUS_REGISTER_SIZE    32
 #define COPY_BUFFER_SIZE        16
 
 #include "flowtable.h"

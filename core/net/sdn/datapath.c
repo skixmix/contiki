@@ -28,11 +28,11 @@ uint8_t getFieldFromPacket(field_t field, uint8_t* copy_buffer, uint8_t* buf_occ
             *buf_occupation = LINKADDR_SIZE;
             return 1;
         case MH_SRC_ADDR:
-            if(parseMeshHeader(ptr_to_packet, NULL, NULL, NULL, (linkaddr_t*)copy_buffer, buf_occupation) > 0);
+            if(parseMeshHeader(ptr_to_packet, NULL, NULL, NULL, (linkaddr_t*)copy_buffer, buf_occupation) > 0)
                 return 1;
             break;
         case MH_DST_ADDR: 
-            if(parseMeshHeader(ptr_to_packet, NULL, (linkaddr_t*)copy_buffer, buf_occupation, NULL, NULL) > 0);
+            if(parseMeshHeader(ptr_to_packet, NULL, (linkaddr_t*)copy_buffer, buf_occupation, NULL, NULL) > 0)
                 return 1;
             break;
         case MH_HL:  
@@ -189,7 +189,7 @@ uint8_t evaluateRule(rule_t* rule){
         //Copy the value of the field into the copy_buffer
         res = getFieldFromPacket(rule->field, copy_buffer, &buf_occupation);
         if(res != 1){
-            printf("Datapath - evaluateRule: error in retrieving the filed\n");
+            printf("Datapath - evaluateRule: the field is not present\n");
             return 0;
         }
         //Apply the bits mask as specified by the size and offset fields
