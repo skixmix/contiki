@@ -45,7 +45,7 @@
 #include "net/link-stats.h"
 #include "net/rpl/rpl.h"
 #include "net/ipv6/uip-nd6.h"
-#include "net/sdn/flowtable.h"
+#include "net/sdn/control_agent.h"
 
 #define UIP_CONF_ROUTER 1
 
@@ -197,7 +197,7 @@ set_global_address(void)
   uip_ip6addr(&server_ipaddr, UIP_DS6_DEFAULT_PREFIX, 0, 0, 0, 0xc30c, 0, 0, 0x0001); //redbee-econotag
 #endif
 #if NETSTACK_CONF_SDN == 1
-  flowtable_test();
+  control_agent_init();
 #endif
 }
 /*---------------------------------------------------------------------------*/

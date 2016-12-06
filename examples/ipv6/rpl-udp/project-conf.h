@@ -47,11 +47,13 @@
 #define UIP_CONF_MAX_ROUTES   10
 #endif /* TEST_MORE_ROUTES */
 
+
 #undef NETSTACK_CONF_RDC
 #define NETSTACK_CONF_RDC     nullrdc_driver
 #undef NULLRDC_CONF_802154_AUTOACK
 #define NULLRDC_CONF_802154_AUTOACK       1
-       
+
+
 /* Define as minutes */
 #define RPL_CONF_DEFAULT_LIFETIME_UNIT   60
 
@@ -60,8 +62,12 @@
 
 #define RPL_CONF_DEFAULT_ROUTE_INFINITE_LIFETIME 1
 //ADDED
+#if NETSTACK_CONF_SDN == 1
 #define RPL_CALLBACK_PARENT_SWITCH sdn_rpl_callback_parent_switch
 #define SDN_CALLBACK_ADD_NEIGHBOR sdn_callback_neighbor
+#endif
+
+#define SICSLOWPAN_CONF_FRAG 0
 //ADDED
 #if WITH_NON_STORING
 #undef RPL_NS_CONF_LINK_NUM
