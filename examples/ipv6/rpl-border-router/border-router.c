@@ -48,6 +48,9 @@
 #include "net/netstack.h"
 #include "dev/button-sensor.h"
 #include "dev/slip.h"
+//ADDED
+#include "net/sdn/control_agent.h"
+//ADDED
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -395,6 +398,9 @@ set_prefix_64(uip_ipaddr_t *prefix_64)
     rpl_set_prefix(dag, &prefix, 64);
     PRINTF("created a new RPL dag\n");
   }
+#if NETSTACK_CONF_SDN == 1
+  control_agent_init();
+#endif
 }
 /*---------------------------------------------------------------------------*/
 PROCESS_THREAD(border_router_process, ev, data)

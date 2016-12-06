@@ -60,6 +60,30 @@
 #define UIP_CONF_RECEIVE_WINDOW  60
 #endif
 
+//ADDED
+#undef UIP_CONF_TCP
+#define UIP_CONF_TCP 1
+
+#define SICSLOWPAN_CONF_FRAG 1
+
+#if NETSTACK_CONF_SDN == 1
+
+#undef NETSTACK_CONF_RDC
+#define NETSTACK_CONF_RDC     nullrdc_driver
+#undef NULLRDC_CONF_802154_AUTOACK
+#define NULLRDC_CONF_802154_AUTOACK       1
+
+#undef QUEUEBUF_CONF_NUM
+#define QUEUEBUF_CONF_NUM 4
+#undef UIP_CONF_MAX_ROUTES
+#define UIP_CONF_MAX_ROUTES  4
+#undef NBR_TABLE_CONF_MAX_NEIGHBORS
+#define NBR_TABLE_CONF_MAX_NEIGHBORS 4
+#define RPL_CALLBACK_PARENT_SWITCH sdn_rpl_callback_parent_switch
+#define SDN_CALLBACK_ADD_NEIGHBOR sdn_callback_neighbor
+#endif
+//ADDED
+
 #ifndef WEBSERVER_CONF_CFS_CONNS
 #define WEBSERVER_CONF_CFS_CONNS 2
 #endif
