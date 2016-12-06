@@ -12,8 +12,12 @@
 #include "net/sdn/flowtable.h"
 #include "net/ipv6/sicslowpan.h"
 #include "net/rpl/rpl.h"
+#include "sys/ctimer.h"
+
+#define TTL_INTERVAL		(1 * CLOCK_SECOND)
 
 void sdn_callback_neighbor(const linkaddr_t *addr);
+void control_agent_init();
 
 #endif	/* CONTROL_AGENT_H */
 

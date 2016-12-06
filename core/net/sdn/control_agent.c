@@ -7,6 +7,7 @@
 
 #include "net/sdn/control_agent.h"
 
+ static struct ctimer timer_ttl;
 
 //Called from the RPL module when it chooses a (new) parent
 void sdn_rpl_callback_parent_switch(rpl_parent_t *old, rpl_parent_t *new){
@@ -80,22 +81,48 @@ void sdn_callback_neighbor(const linkaddr_t *addr){
     add_rule_to_entry(entry, rule); 
     action= create_action(FORWARD, NO_FIELD, 0, 64, addr);        
     add_action_to_entry(entry, action);
-    entry->stats.ttl = 100;
+    entry->stats.ttl = 60*10;       // 10 minutes
     //Check if this neighbor already exits into the flow table
     app = find_entry(entry);
     if(app != NULL){
-        //It exists, so just update the ttl field
-        app->stats.ttl = 100;
+        //We mustn't confuse with the rule installed by RPL, and it may happen if the root is our neighbour
+        if(app->stats.ttl != 0){
+            //It exists, so just update the ttl field
+            app->stats.ttl = 60*10;      // 10 minutes
+        }
         deallocate_entry(entry);
     }
     else{
         //It doesnt't exist, so add it in to the flow table
         add_entry_to_ft(entry);
     }    
-        
-    printf("\nNeighbor: ");
-    print_ll_addr(addr);
-    printf("\n");
     
     print_flowtable();
+}
+
+static void callback_decrement_ttl(void *ptr){
+    entry_t* entry, *app; 
+    ctimer_reset(&timer_ttl);
+    entry = getFlowTableHead();
+    while(entry != NULL){
+        if(entry->stats.ttl == 0){
+            entry = entry->next;
+            continue;
+        }
+        entry->stats.ttl--;
+        if(entry->stats.ttl == 0){
+            app = entry;
+            entry = entry->next;
+            remove_entry(app);
+        }
+        else
+            entry = entry->next;
+    }
+    
+}
+ 
+void control_agent_init(){
+    ctimer_set(&timer_ttl, TTL_INTERVAL, callback_decrement_ttl, NULL);
+    flowtable_init();
+    flowtable_test();
 }
