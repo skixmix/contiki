@@ -311,6 +311,11 @@ int forward(){
     return 1;
 }
 
+int toUpperLayer(){
+    NETSTACK_NETWORK.input();
+    return 1;
+}
+
 const struct interceptor_driver sdn_driver = {
   "sdn",
   sdn_init,
