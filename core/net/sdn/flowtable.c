@@ -247,7 +247,7 @@ entry_t* create_entry(uint16_t priority){
 }
 
 uint8_t add_rule_to_entry(entry_t* entry, rule_t* rule){
-    if(rule == NULL){
+    if(entry == NULL){
         PRINTF("[FLT]: Failed to add a new rule: invalid parameters\n");
         return 0;
     }
@@ -255,7 +255,7 @@ uint8_t add_rule_to_entry(entry_t* entry, rule_t* rule){
 }
 
 uint8_t add_action_to_entry(entry_t* entry, action_t* action){
-    if(action == NULL){
+    if(entry == NULL){
         PRINTF("[FLT]: Failed to add a new action: invalid parameters\n");
         return 0;
     }
@@ -494,6 +494,12 @@ entry_t* find_entry(entry_t* entry_to_match){
         rule_to_match = rule_list;
         action_to_match = action_list;
         
+        //Check if the priority is set and, in case, if it is equal to the entry's one
+        //If the entry to match has priority equals to 0 it means that any priority value is fine
+        if(entry_to_match->priority != 0 && entry_to_match->priority != entry->priority){
+            continue;
+        }
+        
         //For each rule
         for(rule = list_head(entry->rules); rule != NULL; rule = rule->next){
             
@@ -527,7 +533,7 @@ entry_t* find_entry(entry_t* entry_to_match){
                                     //thus, we have found the right entry
     }
     if(entry == NULL)               //If the loop reached the end of the flow table
-        return NULL;                   //it means that there's no entry which has matched
+        return NULL;                //it means that there's no entry which has matched
     return entry;
 }
 
@@ -547,7 +553,7 @@ uint8_t remove_entry(entry_t* entry_to_match){
 }
 
 void flowtable_test(){
-    
+    uint8_t addr_tunslip[8]  = {0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01};
     uint8_t addr_1[8]  = {0xc1, 0x0c, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01};
     uint8_t addr_2[8]  = {0xc1, 0x0c, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02};
     uint8_t addr_3[8]  = {0xc1, 0x0c, 0x00, 0x00, 0x00, 0x00, 0x00, 0x03};
@@ -567,8 +573,57 @@ void flowtable_test(){
         add_rule_to_entry(entry, rule);    
         add_action_to_entry(entry, action);
         add_entry_to_ft(entry);
+        
+        entry = create_entry(1);
+        rule = create_rule(MH_DST_ADDR, 0, 64, EQUAL, addr_6);
+        action= create_action(FORWARD, NO_FIELD, 0, 64, addr_4);
+        add_rule_to_entry(entry, rule);    
+        add_action_to_entry(entry, action);
+        add_entry_to_ft(entry);
     }
     
+    if(memcmp(&linkaddr_node_addr, addr_5, 8) == 0){
+        //Rule for the tunslip host destination
+        entry = create_entry(1);
+        rule = create_rule(MH_DST_ADDR, 0, 64, EQUAL, addr_tunslip);
+        add_rule_to_entry(entry, rule);
+        action= create_action(MODIFY, MH_DST_ADDR, 0, 64, addr_1);
+        add_action_to_entry(entry, action);
+        action= create_action(CONTINUE, NO_FIELD, 0, 0, NULL);
+        add_action_to_entry(entry, action);
+        add_entry_to_ft(entry);
+    }
+    
+    if(memcmp(&linkaddr_node_addr, addr_4, 8) == 0){
+        //Rule for the tunslip host destination
+        entry = create_entry(1);
+        rule = create_rule(MH_DST_ADDR, 0, 64, EQUAL, addr_tunslip);
+        add_rule_to_entry(entry, rule);
+        action= create_action(MODIFY, MH_DST_ADDR, 0, 64, addr_1);
+        add_action_to_entry(entry, action);
+        action= create_action(CONTINUE, NO_FIELD, 0, 0, NULL);
+        add_action_to_entry(entry, action);
+        add_entry_to_ft(entry);
+        
+        entry = create_entry(1);
+        rule = create_rule(MH_DST_ADDR, 0, 64, EQUAL, addr_6);
+        action= create_action(FORWARD, NO_FIELD, 0, 64, addr_5);
+        add_rule_to_entry(entry, rule);    
+        add_action_to_entry(entry, action);
+        add_entry_to_ft(entry);
+    }
+    
+    if(memcmp(&linkaddr_node_addr, addr_6, 8) == 0){
+        //Rule for the tunslip host destination
+        entry = create_entry(1);
+        rule = create_rule(MH_DST_ADDR, 0, 64, EQUAL, addr_tunslip);
+        add_rule_to_entry(entry, rule);
+        action= create_action(MODIFY, MH_DST_ADDR, 0, 64, addr_1);
+        add_action_to_entry(entry, action);
+        action= create_action(CONTINUE, NO_FIELD, 0, 0, NULL);
+        add_action_to_entry(entry, action);
+        add_entry_to_ft(entry);
+    }
     /*
     if(memcmp(&linkaddr_node_addr, addr_2, 8) == 0){
         entry = create_entry(1);
