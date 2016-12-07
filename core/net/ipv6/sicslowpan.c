@@ -69,7 +69,7 @@
 #include "net/rime/rime.h"
 #include "net/ipv6/sicslowpan.h"
 #include "net/netstack.h"
-
+#include "net/rpl/rpl.h"
 #include <stdio.h>
 
 #define DEBUG DEBUG_NONE
@@ -626,6 +626,7 @@ int ipRouteOverListContains(uip_ipaddr_t* ipAddr){
 void extractIidFromIpAddr(linkaddr_t* llAddr, uip_ip6addr_t* ipAddr, uint8_t* addrDim){
     if(ipAddr == NULL || llAddr == NULL || addrDim == NULL)
         return;
+    memset(llAddr, 0, 8);
     //Check if the IPv6 address is multicast
     if(uip_is_addr_mcast(ipAddr) != 1){
         //It is unicast, so extract the 64-bit-long MAC address straight from the IID
@@ -658,7 +659,7 @@ uint8_t parseMeshHeader(uint8_t* ptr_to_packet, uint8_t* hopLimit,
     //TODO: parse the dispatch byte and check the bits V and F in order to derive the addresses length
     //Assume that both addresses are 64 bits sized
     /*----------Parse the Hop Limit field---------*/
-    if(hopLimit != 0)
+    if(hopLimit != NULL)
         *hopLimit = (*ptr) & ((1 << 4) - 1);
     /*----------Parse the Final Address-----------*/
     if(BIT_IS_SET(*ptr, MESH_F_FLAG)){  //64-bit long final address
@@ -702,6 +703,47 @@ void setFinalAddr(linkaddr_t* finalAddr){
     memcpy(packetbuf_ptr + MESH_FINAL_ADDR, finalAddr->u8, LINKADDR_SIZE);
 }
 
+
+void selectFinalDestinationAddress(linkaddr_t* finalAddress, uint8_t* addrDim){
+    uip_ipaddr_t* dest_ip = NULL;
+    rpl_dag_t *dag;
+    
+    if(finalAddress == NULL || addrDim == NULL)
+        return;
+    
+    dag = rpl_get_any_dag();
+
+    //Check if the destination node does not belong to this 6LoWPAN network i.e. if the
+    //destination address is off-link
+    if(uip_ds6_is_addr_onlink(&UIP_IP_BUF->destipaddr) != 1 
+            && uip_ipaddr_prefixcmp(&dag->prefix_info.prefix, &UIP_IP_BUF->destipaddr, dag->prefix_info.length) != 1){
+        
+        //Check if this node is the root of the dodag, 
+        //or if it has no preferred parent (so it cannot communicate with anyone)
+        if(dag->preferred_parent == NULL){
+            //TODO: Drop the packet
+        }
+        else{
+            printf(" Destination offlink\n");    //DEBUG
+            //Select the destination ip address equals to the root's one
+            dest_ip = &dag->dag_id;
+            if(dest_ip == NULL){
+                printf("No root address found ");   //TODO: change in PRINTF
+            }
+            else{
+                printf("DEFAULT GATEWAY IP ADDR: "); //TODO: change in PRINTF
+                uip_debug_ipaddr_print(dest_ip);    //TODO: change in debug PRINTF
+                extractIidFromIpAddr(finalAddress, dest_ip, addrDim);
+            }
+        }      
+    }
+    else{
+        //Send the packet directly to the node, so 
+        //extract the L2 final address from the IP destination address
+        extractIidFromIpAddr(finalAddress, &UIP_IP_BUF->destipaddr, addrDim);
+    }
+}
+
 void insertMeshHeader(){
     uint8_t dispatch;
     uint8_t meshHeaderSize;
@@ -716,8 +758,8 @@ void insertMeshHeader(){
     //Set the Hop Limit field equal to the maximum (TODO: handle different values)
     dispatch |= MESH_DEFAULT_HL;
     
-    //Extract the L2 final address from the IP destination address
-    extractIidFromIpAddr(&finalAddress, &UIP_IP_BUF->destipaddr, &addrDim);
+    selectFinalDestinationAddress(&finalAddress, &addrDim);
+    
     if(addrDim == 8){ //Long unicast address
         
         //Set the size of the mesh header
@@ -2038,7 +2080,6 @@ input(void)
 
 #if SICSLOWPAN_CONF_FRAG
 
-  PRINTF("READ MESH DISPATCH: %02x %02x\n", *(packetbuf_ptr), *(packetbuf_ptr+1));
   
 #if NETSTACK_CONF_SDN == 1  
   if(mesh_src != NULL){
