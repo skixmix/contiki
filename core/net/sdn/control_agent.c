@@ -26,9 +26,20 @@ void sdn_rpl_callback_parent_switch(rpl_parent_t *old, rpl_parent_t *new){
         extractIidFromIpAddr(&llAddrRoot, &old->dag->dag_id, &addrDim);
         
         entry = create_entry(50);
+        if(entry == NULL)
+            return;
         rule = create_rule(MH_DST_ADDR, 0, 64, EQUAL, &llAddrRoot);
-        add_rule_to_entry(entry, rule); 
-        action= create_action(FORWARD, NO_FIELD, 0, 64, &llAddrParent);        
+        if(rule == NULL){
+            deallocate_entry(entry);
+            return; 
+        }
+        action= create_action(FORWARD, NO_FIELD, 0, 64, &llAddrParent);
+        if(action == NULL){
+            deallocate_entry(entry);
+            deallocate_rule(rule);
+            return; 
+        }
+        add_rule_to_entry(entry, rule);
         add_action_to_entry(entry, action);
         remove_entry(entry);  
         
@@ -49,9 +60,20 @@ void sdn_rpl_callback_parent_switch(rpl_parent_t *old, rpl_parent_t *new){
         extractIidFromIpAddr(&llAddrRoot, &new->dag->dag_id, &addrDim);
         
         entry = create_entry(50);
+        if(entry == NULL)
+            return;
         rule = create_rule(MH_DST_ADDR, 0, 64, EQUAL, &llAddrRoot);
-        add_rule_to_entry(entry, rule); 
-        action= create_action(FORWARD, NO_FIELD, 0, 64, &llAddrParent);        
+        if(rule == NULL){
+            deallocate_entry(entry);
+            return; 
+        }
+        action= create_action(FORWARD, NO_FIELD, 0, 64, &llAddrParent);
+        if(action == NULL){
+            deallocate_entry(entry);
+            deallocate_rule(rule);
+            return; 
+        }
+        add_rule_to_entry(entry, rule);
         add_action_to_entry(entry, action);
         add_entry_to_ft(entry);
         
@@ -77,9 +99,20 @@ void sdn_callback_neighbor(const linkaddr_t *addr){
     
     //Create the relative flow entry
     entry = create_entry(60);
+    if(entry == NULL)
+        return;
     rule = create_rule(MH_DST_ADDR, 0, 64, EQUAL, addr);
-    add_rule_to_entry(entry, rule); 
-    action= create_action(FORWARD, NO_FIELD, 0, 64, addr);        
+    if(rule == NULL){
+        deallocate_entry(entry);
+        return;
+    }
+    action= create_action(FORWARD, NO_FIELD, 0, 64, addr);
+    if(action == NULL){
+        deallocate_entry(entry);
+        deallocate_rule(rule);
+        return;
+    }
+    add_rule_to_entry(entry, rule);
     add_action_to_entry(entry, action);
     entry->stats.ttl = 60*10;       // 10 minutes
     //Check if this neighbor already exits into the flow table
