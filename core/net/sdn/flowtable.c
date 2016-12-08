@@ -265,7 +265,13 @@ uint8_t add_action_to_entry(entry_t* entry, action_t* action){
 uint8_t add_entry_to_ft(entry_t* entry){
     entry_t* tmp = NULL;
     entry_t* help = NULL;
-    uint16_t priority = entry->priority;
+    uint16_t priority;
+    
+    if(entry->priority == 0){                //Priority equals to 0 is not allowed because 0 is the "NULL" value of this field
+        PRINTF("[FLT]: Failed to insert the entry: invalid priority\n");
+        return 0;
+    }
+    priority = entry->priority;
     
     //Sorted insert into the flow table list  
     for(tmp = list_head(flowtable); tmp != NULL; tmp = tmp->next){
