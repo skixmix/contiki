@@ -560,35 +560,72 @@ uint8_t remove_entry(entry_t* entry_to_match){
 
 void flowtable_test(){
     uint8_t addr_tunslip[8]  = {0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01};
-    uint8_t addr_1[8]  = {0xc1, 0x0c, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01};
-    uint8_t addr_2[8]  = {0xc1, 0x0c, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02};
-    uint8_t addr_3[8]  = {0xc1, 0x0c, 0x00, 0x00, 0x00, 0x00, 0x00, 0x03};
-    uint8_t addr_4[8]  = {0xc1, 0x0c, 0x00, 0x00, 0x00, 0x00, 0x00, 0x04};
+    uint8_t addr_1[8]  = {0x00, 0x01, 0x00, 0x01, 0x00, 0x01, 0x00, 0x01};
+    uint8_t addr_2[8]  = {0x00, 0x02, 0x00, 0x02, 0x00, 0x02, 0x00, 0x02};
+    uint8_t addr_3[8]  = {0x00, 0x03, 0x00, 0x03, 0x00, 0x03, 0x00, 0x03};
+    uint8_t addr_4[8]  = {0x00, 0x04, 0x00, 0x04, 0x00, 0x04, 0x00, 0x04};
     uint8_t addr_5[8]  = {0xc1, 0x0c, 0x00, 0x00, 0x00, 0x00, 0x00, 0x05};
-    uint8_t addr_6[8]  = {0xc1, 0x0c, 0x00, 0x00, 0x00, 0x00, 0x00, 0x06};
-    uint8_t value = 3;
-    
+    //uint8_t addr_6[8]  = {0xc1, 0x0c, 0x00, 0x00, 0x00, 0x00, 0x00, 0x06};
+    //uint8_t value = 3;
     rule_t* rule;
     action_t* action;
     entry_t* entry;
     
     if(memcmp(&linkaddr_node_addr, addr_1, 8) == 0){
         entry = create_entry(1);
-        rule = create_rule(MH_DST_ADDR, 0, 64, EQUAL, addr_5);
-        action= create_action(FORWARD, NO_FIELD, 0, 64, addr_4);
+        rule = create_rule(MH_DST_ADDR, 0, 64, EQUAL, addr_3);
+        action= create_action(FORWARD, NO_FIELD, 0, 64, addr_2);
         add_rule_to_entry(entry, rule);    
         add_action_to_entry(entry, action);
         add_entry_to_ft(entry);
         
         entry = create_entry(1);
-        rule = create_rule(MH_DST_ADDR, 0, 64, EQUAL, addr_6);
-        action= create_action(FORWARD, NO_FIELD, 0, 64, addr_4);
+        rule = create_rule(MH_DST_ADDR, 0, 64, EQUAL, addr_4);
+        action= create_action(FORWARD, NO_FIELD, 0, 64, addr_2);
         add_rule_to_entry(entry, rule);    
         add_action_to_entry(entry, action);
         add_entry_to_ft(entry);
     }
     
-    if(memcmp(&linkaddr_node_addr, addr_5, 8) == 0){
+    if(memcmp(&linkaddr_node_addr, addr_2, 8) == 0){
+        /*Assumption: the DODAG root's MAC address is known.
+         * Without this static rule it is impossible to communicate with the external
+         * virtual interface (FD00::1), called "tunslip", attached to the border router.
+         * The problem comes from the fact that the border router takes the 
+         * IP prefix from this virtual interface, and it uses that prefix (FD00) 
+         * inside the RPL context.
+         * For this reason, the IP address of the tunslip host is recognized by the
+         * nodes as an on-link address, while the host is off-link instead.
+         * Thus the nodes send packets using the tunslip host's mac address 
+         * as final destination in the Mesh Header finding, though, no matching
+         * rules inside the flow table, preventing the nodes to communicate 
+         * with external hosts, and one of them could be the SDN Controller.
+         * To fix this issue single static rule is required: if the final address
+         * of the mesh header is equal to the tunslip host's one then, modify it 
+         * with the mac address of the dodag root, and continue to scan the 
+         * flow table.
+         * In this way, we can exploit the dynamic rules added trough RPL
+         * in order to send packet toward the border router and, at the same 
+         * time, avoiding inserting static paths. 
+         */
+        entry = create_entry(1);
+        rule = create_rule(MH_DST_ADDR, 0, 64, EQUAL, addr_tunslip);
+        add_rule_to_entry(entry, rule);
+        action= create_action(MODIFY, MH_DST_ADDR, 0, 64, addr_1);
+        add_action_to_entry(entry, action);
+        action= create_action(CONTINUE, NO_FIELD, 0, 0, NULL);
+        add_action_to_entry(entry, action);
+        add_entry_to_ft(entry);
+        
+        entry = create_entry(1);
+        rule = create_rule(MH_DST_ADDR, 0, 64, EQUAL, addr_4);
+        action= create_action(FORWARD, NO_FIELD, 0, 64, addr_3);
+        add_rule_to_entry(entry, rule);    
+        add_action_to_entry(entry, action);
+        add_entry_to_ft(entry);
+    }
+    
+    if(memcmp(&linkaddr_node_addr, addr_3, 8) == 0){
         //Rule for the tunslip host destination
         entry = create_entry(1);
         rule = create_rule(MH_DST_ADDR, 0, 64, EQUAL, addr_tunslip);
@@ -610,26 +647,8 @@ void flowtable_test(){
         action= create_action(CONTINUE, NO_FIELD, 0, 0, NULL);
         add_action_to_entry(entry, action);
         add_entry_to_ft(entry);
-        
-        entry = create_entry(1);
-        rule = create_rule(MH_DST_ADDR, 0, 64, EQUAL, addr_6);
-        action= create_action(FORWARD, NO_FIELD, 0, 64, addr_5);
-        add_rule_to_entry(entry, rule);    
-        add_action_to_entry(entry, action);
-        add_entry_to_ft(entry);
     }
     
-    if(memcmp(&linkaddr_node_addr, addr_6, 8) == 0){
-        //Rule for the tunslip host destination
-        entry = create_entry(1);
-        rule = create_rule(MH_DST_ADDR, 0, 64, EQUAL, addr_tunslip);
-        add_rule_to_entry(entry, rule);
-        action= create_action(MODIFY, MH_DST_ADDR, 0, 64, addr_1);
-        add_action_to_entry(entry, action);
-        action= create_action(CONTINUE, NO_FIELD, 0, 0, NULL);
-        add_action_to_entry(entry, action);
-        add_entry_to_ft(entry);
-    }
     /*
     if(memcmp(&linkaddr_node_addr, addr_2, 8) == 0){
         entry = create_entry(1);

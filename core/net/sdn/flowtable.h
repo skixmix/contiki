@@ -30,7 +30,7 @@
 #define MAX_NUM_ACTIONS         10
 #define NUM_BYTES_2_BLOCKS      4
 #define NUM_BYTES_4_BLOCKS      4
-#define NUM_BYTES_8_BLOCKS      10
+#define NUM_BYTES_8_BLOCKS      15
 #define NUM_BYTES_16_BLOCKS     2
 
 /*---------------------Flow Table data structures-----------------------------*/
@@ -124,7 +124,7 @@ typedef struct stats{
 
 typedef struct entry{
     struct entry *next;
-    uint16_t priority;
+    uint16_t priority;      //The value 0 means that the priority field is not meaningful
     LIST_STRUCT(rules);
     LIST_STRUCT(actions);
     stats_t stats;
