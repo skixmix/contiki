@@ -12,7 +12,7 @@
 #define COPY_BUFFER_SIZE        16
 
 #include "flowtable.h"
-#include "sdn.h"
+#include "net/sdn/sdn.h"
 #include "net/ipv6/sicslowpan.h"
 #include "net/packetbuf.h"
 #include "net/linkaddr.h"
