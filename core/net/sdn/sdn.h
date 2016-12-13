@@ -26,5 +26,7 @@ typedef enum {
  */
 int forward();
 
+int toUpperLayer();
+
 #endif /* SDN_H_ */
 

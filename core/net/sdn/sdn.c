@@ -256,7 +256,7 @@ send(mac_callback_t sent, void *ptr)
     uint8_t hopLimit;
     uint8_t* ptr_to_pkt = packetbuf_dataptr();
     uip_ipaddr_t ipAddr;
-    int res;
+    int res = 0;
     
     sent_callback = sent;
     ptr_copy = ptr;
@@ -279,7 +279,8 @@ send(mac_callback_t sent, void *ptr)
     /*------------------------------Logic------------------------------*/
         
     //Read the IPv6 destination address
-    res = readIPaddr(&ipAddr);
+    //res = readIPaddr(&ipAddr);
+    res = copyDestIpAddress(&ipAddr);
     if(res == -1){
         printf("SDN layer: Failed in reading the IP address");
         //Something went wrong, drop the packet
