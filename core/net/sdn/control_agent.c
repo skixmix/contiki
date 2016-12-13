@@ -85,7 +85,7 @@ void sdn_rpl_callback_parent_switch(rpl_parent_t *old, rpl_parent_t *new){
     print_ll_addr(&llAddrRoot);    
     printf("\n");
     */
-    print_flowtable();
+    //print_flowtable();
 }
 
 //Called from the link-stat module when it receive a message from a neighbor
@@ -130,7 +130,7 @@ void sdn_callback_neighbor(const linkaddr_t *addr){
         add_entry_to_ft(entry);
     }    
     
-    print_flowtable();
+    //print_flowtable();
 }
 
 static void callback_decrement_ttl(void *ptr){
