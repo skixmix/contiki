@@ -211,6 +211,7 @@ static uint8_t uncomp_hdr_len;
 static int last_tx_status;
 /** @} */
 
+linkaddr_t* mesh_src;
 
 static int last_rssi;
 
@@ -349,6 +350,18 @@ add_fragment(uint16_t tag, uint16_t frag_size, uint8_t offset)
   int i;
   int len;
   int8_t found = -1;
+  linkaddr_t* sender;
+#if NETSTACK_CONF_SDN == 1  
+  if(mesh_src != NULL)
+      sender = mesh_src;
+  else
+      sender = packetbuf_addr(PACKETBUF_ADDR_SENDER);
+#else
+  sender = packetbuf_addr(PACKETBUF_ADDR_SENDER);
+#endif
+  //ADDED - DEBUG
+  printf("DEBUG Add fragment tag = %u\n", tag);
+  //ADDED - DEBUG
 
   if(offset == 0) {
     /* This is a first fragment - check if we can add this */
@@ -374,8 +387,7 @@ add_fragment(uint16_t tag, uint16_t frag_size, uint8_t offset)
     /* Found a free fragment info to store data in */
     frag_info[found].len = frag_size;
     frag_info[found].tag = tag;
-    linkaddr_copy(&frag_info[found].sender,
-                  packetbuf_addr(PACKETBUF_ADDR_SENDER));
+    linkaddr_copy(&frag_info[found].sender, sender);
     timer_set(&frag_info[found].reass_timer, SICSLOWPAN_REASS_MAXAGE * CLOCK_SECOND / 16);
     /* first fragment can not be stored immediately but is moved into
        the buffer while uncompressing */
@@ -385,7 +397,7 @@ add_fragment(uint16_t tag, uint16_t frag_size, uint8_t offset)
   /* This is a N-fragment - should find the info */
   for(i = 0; i < SICSLOWPAN_REASS_CONTEXTS; i++) {
     if(frag_info[i].tag == tag && frag_info[i].len > 0 &&
-       linkaddr_cmp(&frag_info[i].sender, packetbuf_addr(PACKETBUF_ADDR_SENDER))) {
+       linkaddr_cmp(&frag_info[i].sender, sender)) {
       /* Tag and Sender match - this must be the correct info to store in */
       found = i;
       break;
@@ -397,7 +409,7 @@ add_fragment(uint16_t tag, uint16_t frag_size, uint8_t offset)
     PRINTF("*** Failed to store N-fragment - could not find session - tag: %d offset: %d\n", tag, offset);
     return -1;
   }
-
+    
   /* i is the index of the reassembly context */
   len = store_fragment(i, offset);
   if(len < 0 && timeout_fragments(i) > 0) {
@@ -604,7 +616,7 @@ compress_addr_64(uint8_t bitpos, uip_ipaddr_t *ipaddr, uip_lladdr_t *lladdr)
 #define MESH_F_FLAG                 4
 #define MESH_DEFAULT_HL             0x0e    /* xxxx1110 */
 uip_ipaddr_t routeOverAddrList[MAX_NUM_ROUTE_OVER_ADDRS];
-linkaddr_t* mesh_src;
+
 MEMB(linkaddr_memb, linkaddr_t, 1);
 
 void inline print_ll_addr(uint8_t* addr){ 
@@ -799,6 +811,20 @@ void insertMeshHeader(){
     
 }
 
+uint8_t computeMeshHeaderLength(){
+    linkaddr_t finalAddress;
+    uint8_t addrDim;
+    if(ipRouteOverListContains(&UIP_IP_BUF->destipaddr) == 1)
+        return 0;
+    else{
+        selectFinalDestinationAddress(&finalAddress, &addrDim);
+        if(addrDim == 8)
+            return 1 + LINKADDR_SIZE*2;
+        else
+            return 1 + 2 + LINKADDR_SIZE;  
+    } 
+}
+
 void meshUnderOrRouteOver(){
     if(ipRouteOverListContains(&UIP_IP_BUF->destipaddr) == 1){ //ROUTE OVER -> do nothing
         /*
@@ -813,6 +839,12 @@ void meshUnderOrRouteOver(){
         return;
     }
     
+}
+
+int copyDestIpAddress(uip_ipaddr_t* destAddr){
+    if(destAddr == NULL)
+        return -1;
+    memcpy(destAddr, &UIP_IP_BUF->destipaddr, sizeof(uip_ipaddr_t));
 }
 
 int pktHasMeshHeader(uint8_t* ptr_to_packet){
@@ -1500,8 +1532,7 @@ int readIPaddr(uip_ipaddr_t* destAddr){
     /* Save the RSSI of the incoming packet in case the upper layer will
        want to query us for it later. */
     last_rssi = (signed short)packetbuf_attr(PACKETBUF_ATTR_RSSI);
-
-#if SICSLOWPAN_CONF_FRAG
+    
     if(mesh_src != NULL){
         memb_free(&linkaddr_memb, mesh_src);
         mesh_src = NULL;
@@ -1510,6 +1541,9 @@ int readIPaddr(uip_ipaddr_t* destAddr){
         mesh_src = memb_alloc(&linkaddr_memb);
         packetbuf_hdr_len += parseMeshHeader(NULL, NULL, NULL, NULL, mesh_src, NULL);
     }
+    
+
+#if SICSLOWPAN_CONF_FRAG
     
     /*
      * Since we don't support the mesh and broadcast header, the first header
@@ -1806,6 +1840,7 @@ output(const uip_lladdr_t *localdest)
 {
   int framer_hdrlen;
   int max_payload;
+  int meshHeaderLen;
 
   /* The MAC address of the destination of the packet */
   linkaddr_t dest;
@@ -1813,6 +1848,7 @@ output(const uip_lladdr_t *localdest)
   /* init */
   uncomp_hdr_len = 0;
   packetbuf_hdr_len = 0;
+  meshHeaderLen = 0;
 
   /* reset packetbuf buffer */
   packetbuf_clear();
@@ -1880,9 +1916,16 @@ output(const uip_lladdr_t *localdest)
 #else /* USE_FRAMER_HDRLEN */
   framer_hdrlen = SICSLOWPAN_FIXED_HDRLEN;
 #endif /* USE_FRAMER_HDRLEN */
+  
 
   max_payload = MAC_MAX_PAYLOAD - framer_hdrlen;
-  if((int)uip_len - (int)uncomp_hdr_len > max_payload - (int)packetbuf_hdr_len) {
+  
+#if NETSTACK_CONF_SDN == 1
+  //max_payload -= (int)computeMeshHeaderLength();
+  meshHeaderLen = (int)computeMeshHeaderLength();
+#endif
+  
+  if((int)uip_len - (int)uncomp_hdr_len > max_payload - (int)packetbuf_hdr_len - meshHeaderLen) {
 #if SICSLOWPAN_CONF_FRAG
     /* Number of bytes processed. */
     uint16_t processed_ip_out_len;
@@ -1897,7 +1940,7 @@ output(const uip_lladdr_t *localdest)
      * IPv6/IPHC/HC_UDP dispatchs/headers.
      * The following fragments contain only the fragn dispatch.
      */
-    int estimated_fragments = ((int)uip_len) / (max_payload - SICSLOWPAN_FRAGN_HDR_LEN) + 1;
+    int estimated_fragments = ((int)uip_len) / (max_payload - SICSLOWPAN_FRAGN_HDR_LEN - meshHeaderLen) + 1;
     int freebuf = queuebuf_numfree() - 1;
     PRINTFO("uip_len: %d, fragments: %d, free bufs: %d\n", uip_len, estimated_fragments, freebuf);
     if(freebuf < estimated_fragments) {
@@ -1926,16 +1969,19 @@ output(const uip_lladdr_t *localdest)
           ((SICSLOWPAN_DISPATCH_FRAG1 << 8) | uip_len));
     frag_tag = my_tag++;
     SET16(PACKETBUF_FRAG_PTR, PACKETBUF_FRAG_TAG, frag_tag);
+    /* Copy payload and send */
+    packetbuf_hdr_len += SICSLOWPAN_FRAG1_HDR_LEN;
+    
 #if NETSTACK_CONF_SDN == 1
     //Check if this packet needs the Mesh Header or not   
     meshUnderOrRouteOver();
+    //After this, the packetbuf_hdr_len might be increased of the mesh header's length 
 #endif
-    /* Copy payload and send */
-    packetbuf_hdr_len += SICSLOWPAN_FRAG1_HDR_LEN;
+    
     packetbuf_payload_len = (max_payload - packetbuf_hdr_len) & 0xfffffff8;
     PRINTFO("(len %d, tag %d)\n", packetbuf_payload_len, frag_tag);
     memcpy(packetbuf_ptr + packetbuf_hdr_len,
-           (uint8_t *)UIP_IP_BUF + uncomp_hdr_len, packetbuf_payload_len);
+           (uint8_t *)UIP_IP_BUF + uncomp_hdr_len, packetbuf_payload_len);    
     packetbuf_set_datalen(packetbuf_payload_len + packetbuf_hdr_len);
     q = queuebuf_new_from_packetbuf();
     if(q == NULL) {
@@ -1963,21 +2009,23 @@ output(const uip_lladdr_t *localdest)
      * Datagram tag is already in the buffer, we need to set the
      * FRAGN dispatch and for each fragment, the offset
      */
-    packetbuf_hdr_len = SICSLOWPAN_FRAGN_HDR_LEN;
+    
+    while(processed_ip_out_len < uip_len) {
+      packetbuf_hdr_len = SICSLOWPAN_FRAGN_HDR_LEN;
 /*     PACKETBUF_FRAG_BUF->dispatch_size = */
 /*       uip_htons((SICSLOWPAN_DISPATCH_FRAGN << 8) | uip_len); */
-    SET16(PACKETBUF_FRAG_PTR, PACKETBUF_FRAG_DISPATCH_SIZE,
+      packetbuf_payload_len = (max_payload - packetbuf_hdr_len - meshHeaderLen) & 0xfffffff8;
+      SET16(PACKETBUF_FRAG_PTR, PACKETBUF_FRAG_DISPATCH_SIZE,
           ((SICSLOWPAN_DISPATCH_FRAGN << 8) | uip_len));
-    packetbuf_payload_len = (max_payload - packetbuf_hdr_len) & 0xfffffff8;
-    while(processed_ip_out_len < uip_len) {
+      SET16(PACKETBUF_FRAG_PTR, PACKETBUF_FRAG_TAG, frag_tag);
       PRINTFO("sicslowpan output: fragment ");
       PACKETBUF_FRAG_PTR[PACKETBUF_FRAG_OFFSET] = processed_ip_out_len >> 3;
       
 #if NETSTACK_CONF_SDN == 1
-    //Check if this packet needs the Mesh Header or not   
-    meshUnderOrRouteOver();
+        //Check if this packet needs the Mesh Header or not   
+        meshUnderOrRouteOver();
 #endif
-      
+        
       /* Copy payload and send */
       if(uip_len - processed_ip_out_len < packetbuf_payload_len) {
         /* last fragment */
@@ -1986,7 +2034,7 @@ output(const uip_lladdr_t *localdest)
       PRINTFO("(offset %d, len %d, tag %d)\n",
              processed_ip_out_len >> 3, packetbuf_payload_len, frag_tag);
       memcpy(packetbuf_ptr + packetbuf_hdr_len,
-             (uint8_t *)UIP_IP_BUF + processed_ip_out_len, packetbuf_payload_len);
+             (uint8_t *)UIP_IP_BUF + processed_ip_out_len, packetbuf_payload_len);      
       packetbuf_set_datalen(packetbuf_payload_len + packetbuf_hdr_len);
       q = queuebuf_new_from_packetbuf();
       if(q == NULL) {
@@ -2077,9 +2125,7 @@ input(void)
   /* Save the RSSI of the incoming packet in case the upper layer will
      want to query us for it later. */
   last_rssi = (signed short)packetbuf_attr(PACKETBUF_ATTR_RSSI);
-
-#if SICSLOWPAN_CONF_FRAG
-
+  
   
 #if NETSTACK_CONF_SDN == 1  
   if(mesh_src != NULL){
@@ -2091,20 +2137,33 @@ input(void)
       mesh_src = memb_alloc(&linkaddr_memb);
       //Just take the originator address for uncompression purpose
       packetbuf_hdr_len += parseMeshHeader(NULL, NULL, NULL, NULL, mesh_src, NULL);
+      
   }
 #endif
+
+#if SICSLOWPAN_CONF_FRAG
+  
+  //ADDED-DEBUG
+  printf("DEBUG Input\n");
+  //ADDED-DEBUG
+  
   /*
    * Since we don't support the mesh and broadcast header, the first header
    * we look for is the fragmentation header
    */
-  switch((GET16(PACKETBUF_FRAG_PTR, PACKETBUF_FRAG_DISPATCH_SIZE) & 0xf800) >> 8) {
+  switch((GET16(PACKETBUF_FRAG_PTR + packetbuf_hdr_len, PACKETBUF_FRAG_DISPATCH_SIZE) & 0xf800) >> 8) {
     case SICSLOWPAN_DISPATCH_FRAG1:
+        
+  //ADDED - DEBUG
+  printf("DEBUG Frag1\n");
+  //ADDED - DEBUG
+        
       PRINTFI("sicslowpan input: FRAG1 ");
       frag_offset = 0;
 /*       frag_size = (uip_ntohs(PACKETBUF_FRAG_BUF->dispatch_size) & 0x07ff); */
-      frag_size = GET16(PACKETBUF_FRAG_PTR, PACKETBUF_FRAG_DISPATCH_SIZE) & 0x07ff;
+      frag_size = GET16(PACKETBUF_FRAG_PTR + packetbuf_hdr_len, PACKETBUF_FRAG_DISPATCH_SIZE) & 0x07ff;
 /*       frag_tag = uip_ntohs(PACKETBUF_FRAG_BUF->tag); */
-      frag_tag = GET16(PACKETBUF_FRAG_PTR, PACKETBUF_FRAG_TAG);
+      frag_tag = GET16(PACKETBUF_FRAG_PTR + packetbuf_hdr_len, PACKETBUF_FRAG_TAG);
       PRINTFI("size %d, tag %d, offset %d)\n",
              frag_size, frag_tag, frag_offset);
       packetbuf_hdr_len += SICSLOWPAN_FRAG1_HDR_LEN;
@@ -2123,14 +2182,18 @@ input(void)
 
       break;
     case SICSLOWPAN_DISPATCH_FRAGN:
+        //ADDED-DEBUG
+        printf("DEBUG FragN\n");
+        //ADDED-DEBUG
+
       /*
        * set offset, tag, size
        * Offset is in units of 8 bytes
        */
       PRINTFI("sicslowpan input: FRAGN ");
-      frag_offset = PACKETBUF_FRAG_PTR[PACKETBUF_FRAG_OFFSET];
-      frag_tag = GET16(PACKETBUF_FRAG_PTR, PACKETBUF_FRAG_TAG);
-      frag_size = GET16(PACKETBUF_FRAG_PTR, PACKETBUF_FRAG_DISPATCH_SIZE) & 0x07ff;
+      frag_offset = (PACKETBUF_FRAG_PTR + packetbuf_hdr_len)[PACKETBUF_FRAG_OFFSET];
+      frag_tag = GET16(PACKETBUF_FRAG_PTR + packetbuf_hdr_len, PACKETBUF_FRAG_TAG);
+      frag_size = GET16(PACKETBUF_FRAG_PTR + packetbuf_hdr_len, PACKETBUF_FRAG_DISPATCH_SIZE) & 0x07ff;
       PRINTFI("size %d, tag %d, offset %d)\n",
              frag_size, frag_tag, frag_offset);
       packetbuf_hdr_len += SICSLOWPAN_FRAGN_HDR_LEN;
@@ -2204,6 +2267,11 @@ input(void)
    * and packetbuf_hdr_len are non 0, frag_offset is.
    * If this is a subsequent fragment, this is the contrary.
    */
+        
+  //ADDED - DEBUG
+  printf("DEBUG Copy payload\n");
+  //ADDED - DEBUG
+        
   if(packetbuf_datalen() < packetbuf_hdr_len) {
     PRINTF("SICSLOWPAN: packet dropped due to header > total packet\n");
     return;

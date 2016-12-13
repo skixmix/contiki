@@ -354,6 +354,7 @@ uint8_t parseMeshHeader(uint8_t* ptr_to_packet, uint8_t* hopLimit,
 void setFinalAddr(linkaddr_t* finalAddr);
 
 void extractIidFromIpAddr(linkaddr_t* llAddr, uip_ip6addr_t* ipAddr, uint8_t* addrDim);
+int copyDestIpAddress(uip_ipaddr_t* destAddr);
 
 int sicslowpan_get_last_rssi(void);
 
