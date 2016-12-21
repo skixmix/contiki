@@ -251,7 +251,8 @@ uint8_t add_rule_to_entry(entry_t* entry, rule_t* rule){
         PRINTF("[FLT]: Failed to add a new rule: invalid parameters\n");
         return 0;
     }
-    list_add(entry->rules, rule);
+    if(rule != NULL)
+        list_add(entry->rules, rule);
 }
 
 uint8_t add_action_to_entry(entry_t* entry, action_t* action){
@@ -259,7 +260,8 @@ uint8_t add_action_to_entry(entry_t* entry, action_t* action){
         PRINTF("[FLT]: Failed to add a new action: invalid parameters\n");
         return 0;
     }
-    list_add(entry->actions, action);
+    if(action != NULL)
+        list_add(entry->actions, action);
 }
 
 uint8_t add_entry_to_ft(entry_t* entry){
@@ -488,13 +490,13 @@ entry_t* find_entry(entry_t* entry_to_match){
         return NULL;
     
     rule_list = list_head(entry_to_match->rules);
-    num_rules = list_length(*entry_to_match->rules);
+    num_rules = list_length(entry_to_match->rules);
     action_list = list_head(entry_to_match->actions);
-    num_actions = list_length(*entry_to_match->actions);
+    num_actions = list_length(entry_to_match->actions);
     
     //Search the entry with the same rules as the parameter
     for(entry = list_head(flowtable); entry != NULL; entry = entry->next){
-        if(num_rules != list_length((list_t)*entry->rules))
+        if(num_rules != list_length(entry->rules))
             continue;
         //Initialize support pointers
         rule_to_match = rule_list;
@@ -595,17 +597,17 @@ void flowtable_test(){
          * IP prefix from this virtual interface, and it uses that prefix (FD00) 
          * inside the RPL context.
          * For this reason, the IP address of the tunslip host is recognized by the
-         * nodes as an on-link address, while the host is off-link instead.
+         * nodes as an on-link address, whereas the host is off-link.
          * Thus the nodes send packets using the tunslip host's mac address 
-         * as final destination in the Mesh Header finding, though, no matching
+         * as final destination in the Mesh Header, though finding no matching
          * rules inside the flow table, preventing the nodes to communicate 
          * with external hosts, and one of them could be the SDN Controller.
          * To fix this issue single static rule is required: if the final address
          * of the mesh header is equal to the tunslip host's one then, modify it 
          * with the mac address of the dodag root, and continue to scan the 
          * flow table.
-         * In this way, we can exploit the dynamic rules added trough RPL
-         * in order to send packet toward the border router and, at the same 
+         * This way, we can exploit the dynamic rules added through RPL
+         * in order to send packets toward the border router and, at the same 
          * time, avoiding inserting static paths. 
          */
         entry = create_entry(1);
@@ -647,6 +649,16 @@ void flowtable_test(){
         action= create_action(CONTINUE, NO_FIELD, 0, 0, NULL);
         add_action_to_entry(entry, action);
         add_entry_to_ft(entry);
+        
+        /*
+        entry = create_entry(100);
+        rule = NULL;
+        action= create_action(FORWARD, NO_FIELD, 0, 64, addr_2);
+        add_rule_to_entry(entry, rule);    
+        add_action_to_entry(entry, action);
+        add_entry_to_ft(entry);
+        */
+        
     }
     
     /*
