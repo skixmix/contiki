@@ -1528,10 +1528,6 @@ int readIPaddr(uip_ipaddr_t* destAddr){
     packetbuf_ptr = packetbuf_dataptr();
     /* This is default uip_buf since we assume that this is not fragmented */
     buffer = (uint8_t *)UIP_IP_BUF;
-
-    /* Save the RSSI of the incoming packet in case the upper layer will
-       want to query us for it later. */
-    last_rssi = (signed short)packetbuf_attr(PACKETBUF_ATTR_RSSI);
     
     if(mesh_src != NULL){
         memb_free(&linkaddr_memb, mesh_src);
@@ -1546,72 +1542,72 @@ int readIPaddr(uip_ipaddr_t* destAddr){
 #if SICSLOWPAN_CONF_FRAG
     
     /*
-     * Since we don't support the mesh and broadcast header, the first header
-     * we look for is the fragmentation header
-     */
+   * Since we don't support the mesh and broadcast header, the first header
+   * we look for is the fragmentation header
+   */
     switch((GET16(PACKETBUF_FRAG_PTR, PACKETBUF_FRAG_DISPATCH_SIZE) & 0xf800) >> 8) {
-        case SICSLOWPAN_DISPATCH_FRAG1:
-            PRINTFI("sicslowpan input: FRAG1 ");
-            frag_offset = 0;
-      /*       frag_size = (uip_ntohs(PACKETBUF_FRAG_BUF->dispatch_size) & 0x07ff); */
+    case SICSLOWPAN_DISPATCH_FRAG1:
+      PRINTFI("sicslowpan input: FRAG1 ");
+      frag_offset = 0;
+/*       frag_size = (uip_ntohs(PACKETBUF_FRAG_BUF->dispatch_size) & 0x07ff); */
             frag_size = GET16(PACKETBUF_FRAG_PTR, PACKETBUF_FRAG_DISPATCH_SIZE) & 0x07ff;
-      /*       frag_tag = uip_ntohs(PACKETBUF_FRAG_BUF->tag); */
+/*       frag_tag = uip_ntohs(PACKETBUF_FRAG_BUF->tag); */
             frag_tag = GET16(PACKETBUF_FRAG_PTR, PACKETBUF_FRAG_TAG);
-            PRINTFI("size %d, tag %d, offset %d)\n",
-                   frag_size, frag_tag, frag_offset);
-            packetbuf_hdr_len += SICSLOWPAN_FRAG1_HDR_LEN;
-            /*      printf("frag1 %d %d\n", reass_tag, frag_tag);*/
-            first_fragment = 1;
-            is_fragment = 1;
+      PRINTFI("size %d, tag %d, offset %d)\n",
+             frag_size, frag_tag, frag_offset);
+      packetbuf_hdr_len += SICSLOWPAN_FRAG1_HDR_LEN;
+      /*      printf("frag1 %d %d\n", reass_tag, frag_tag);*/
+      first_fragment = 1;
+      is_fragment = 1;
 
-            /* Add the fragment to the fragmentation context */
-            frag_context = add_fragment(frag_tag, frag_size, frag_offset);
+      /* Add the fragment to the fragmentation context */
+      frag_context = add_fragment(frag_tag, frag_size, frag_offset);
 
-            if(frag_context == -1) {
+      if(frag_context == -1) {
               return -1;
-            }
+      }
 
-            buffer = frag_info[frag_context].first_frag;
+      buffer = frag_info[frag_context].first_frag;
 
-            break;
-        case SICSLOWPAN_DISPATCH_FRAGN:
-            /*
-             * set offset, tag, size
-             * Offset is in units of 8 bytes
-             */
-            PRINTFI("sicslowpan input: FRAGN ");
+      break;
+    case SICSLOWPAN_DISPATCH_FRAGN:
+      /*
+       * set offset, tag, size
+       * Offset is in units of 8 bytes
+       */
+      PRINTFI("sicslowpan input: FRAGN ");
             frag_offset = PACKETBUF_FRAG_PTR[PACKETBUF_FRAG_OFFSET];
             frag_tag = GET16(PACKETBUF_FRAG_PTR, PACKETBUF_FRAG_TAG);
             frag_size = GET16(PACKETBUF_FRAG_PTR, PACKETBUF_FRAG_DISPATCH_SIZE) & 0x07ff;
-            PRINTFI("size %d, tag %d, offset %d)\n",
-                   frag_size, frag_tag, frag_offset);
-            packetbuf_hdr_len += SICSLOWPAN_FRAGN_HDR_LEN;
+      PRINTFI("size %d, tag %d, offset %d)\n",
+             frag_size, frag_tag, frag_offset);
+      packetbuf_hdr_len += SICSLOWPAN_FRAGN_HDR_LEN;
 
-            /* If this is the last fragment, we may shave off any extrenous
-               bytes at the end. We must be liberal in what we accept. */
-            PRINTFI("last_fragment?: packetbuf_payload_len %d frag_size %d\n",
-                    packetbuf_datalen() - packetbuf_hdr_len, frag_size);
+      /* If this is the last fragment, we may shave off any extrenous
+         bytes at the end. We must be liberal in what we accept. */
+      PRINTFI("last_fragment?: packetbuf_payload_len %d frag_size %d\n",
+              packetbuf_datalen() - packetbuf_hdr_len, frag_size);
 
-            /* Add the fragment to the fragmentation context (this will also
-               copy the payload) */
-            frag_context = add_fragment(frag_tag, frag_size, frag_offset);
+      /* Add the fragment to the fragmentation context (this will also
+         copy the payload) */
+      frag_context = add_fragment(frag_tag, frag_size, frag_offset);
 
-            if(frag_context == -1) {
+      if(frag_context == -1) {
               return -1;
-            }
+      }
 
-            /* Ok - add_fragment will store the fragment automatically - so
-               we should not store more */
-            buffer = NULL;
+      /* Ok - add_fragment will store the fragment automatically - so
+         we should not store more */
+      buffer = NULL;
 
-            if(frag_info[frag_context].reassembled_len >= frag_size) {
-              last_fragment = 1;
-            }
-            is_fragment = 1;
-            break;
-        default:
-            break;
-    }
+      if(frag_info[frag_context].reassembled_len >= frag_size) {
+        last_fragment = 1;
+      }
+      is_fragment = 1;
+      break;
+    default:
+      break;
+  }
 
     if(is_fragment && !first_fragment) {
         /* this is a FRAGN, skip the header compression dispatch section */
@@ -1635,14 +1631,14 @@ int readIPaddr(uip_ipaddr_t* destAddr){
             memcpy(buffer, packetbuf_ptr + packetbuf_hdr_len, UIP_IPH_LEN);
 
             /* Update uncomp_hdr_len and packetbuf_hdr_len. */
-        packetbuf_hdr_len += UIP_IPH_LEN;
-        uncomp_hdr_len += UIP_IPH_LEN;
+            packetbuf_hdr_len += UIP_IPH_LEN;
+            uncomp_hdr_len += UIP_IPH_LEN;
         break;
         default:
-        /* unknown header */
-        PRINTFI("sicslowpan input: unknown dispatch: %u\n",
-               PACKETBUF_HC1_PTR[PACKETBUF_HC1_DISPATCH]);
-        return -1;
+            /* unknown header */
+            PRINTFI("sicslowpan input: unknown dispatch: %u\n",
+                   PACKETBUF_HC1_PTR[PACKETBUF_HC1_DISPATCH]);
+            return -1;
   }
 
 
@@ -1744,9 +1740,9 @@ my_copypayload:
     uip_debug_ipaddr_print(&UIP_IP_BUF->srcipaddr);
     printf("\n");
     //DEBUG
-    memcpy(destAddr, &UIP_IP_BUF->destipaddr, sizeof(uip_ipaddr_t));
-    return 1;
-}
+        memcpy(destAddr, &UIP_IP_BUF->destipaddr, sizeof(uip_ipaddr_t));
+        return 1;
+    }
 
 /*--------------------------------------------------------------------*/
 /** \name IPv6 dispatch "compression" function
@@ -2424,6 +2420,7 @@ sicslowpan_init(void)
   
   /*-----------------------------6LoWPAN SDN----------------------------------*/
   uip_ip6addr(&routeOverAddrList[0], 0xff02, 0, 0, 0, 0, 0, 0, 0x001a);
+  //uip_ip6addr(&routeOverAddrList[1], 0xfd00, 0, 0, 0, 0, 0, 0, 0x0001);
   memb_init(&linkaddr_memb);
 }
 /*--------------------------------------------------------------------*/
