@@ -54,6 +54,7 @@
 
 #include <string.h>
 
+//#define DEBUG DEBUG_PRINT
 #define DEBUG DEBUG_NONE
 #include "net/ip/uip-debug.h"
 
@@ -521,6 +522,7 @@ eventhandler(process_event_t ev, process_data_t data)
 void
 tcpip_input(void)
 {
+    printf("DEBUG Packet IP input\n");
   process_post_synch(&tcpip_process, PACKET_INPUT, NULL);
   uip_clear_buf();
 }
