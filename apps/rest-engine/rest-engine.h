@@ -49,6 +49,8 @@
 #define REGISTERED_ENGINE_ERBIUM coap_rest_implementation
 #define REGISTERED_ENGINE_HELIUM http_rest_implementation
 
+#define REST coap_rest_implementation
+
 /* sanity check for configured implementation */
 #if !defined(REST) || (REST != REGISTERED_ENGINE_ERBIUM && REST != REGISTERED_ENGINE_HELIUM)
 #error "Define a valid REST Engine implementation (REST define)!"
