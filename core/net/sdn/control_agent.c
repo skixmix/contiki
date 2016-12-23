@@ -7,7 +7,40 @@
 
 #include "net/sdn/control_agent.h"
 
- static struct ctimer timer_ttl;
+
+PROCESS(coap_client_process, "Coap Client");
+static struct ctimer timer_ttl;
+static struct ringbufindex requests_ringbuf;
+static request_t requests_array[MAX_REQUEST];
+uip_ipaddr_t server_ipaddr;
+
+#define REMOTE_PORT     UIP_HTONS(COAP_DEFAULT_PORT)
+#define SERVER_NODE(ipaddr)   uip_ip6addr(ipaddr, 0xfd00, 0, 0, 0, 0, 0, 0, 0x0001) 
+
+
+void start_request(void){
+    process_poll(&coap_client_process);
+}
+
+request_t* add_request(void){
+  int index = ringbufindex_peek_put(&requests_ringbuf);
+  printf("ADD INDEX=%i\n", index);
+  if(index != -1){
+      ringbufindex_put(&requests_ringbuf);
+      return &requests_array[index];
+  }
+  return NULL;
+}
+
+request_t* get_next_request(void){
+  int index = ringbufindex_get(&requests_ringbuf);
+  printf("GET INDEX=%i\n", index);
+  if(index != -1){
+      return &requests_array[index];
+  }
+  return NULL;
+}
+
 
 //Called from the RPL module when it chooses a (new) parent
 void sdn_rpl_callback_parent_switch(rpl_parent_t *old, rpl_parent_t *new){
@@ -152,10 +185,69 @@ static void callback_decrement_ttl(void *ptr){
             entry = entry->next;
     }
     
+    /* prepare request, TID is set by COAP_BLOCKING_REQUEST() */
+    request_t* req = add_request();
+    if(req != NULL){
+        coap_init_message(&req->req_packet, COAP_TYPE_CON, COAP_GET, 0);
+        coap_set_header_uri_path(&req->req_packet, "Network");
+        req->type = TOPOLOGY_UPDATE;
+        printf("Created request\n");
+        //const char msg[] = "Toggle!";
+
+        //coap_set_payload(request, (uint8_t *)msg, sizeof(msg) - 1);
+
+    }
+    start_request();
 }
  
 void control_agent_init(){
     ctimer_set(&timer_ttl, TTL_INTERVAL, callback_decrement_ttl, NULL);
     flowtable_init();
     flowtable_test();
+    
+    SERVER_NODE(&server_ipaddr);
+    /* receives all CoAP messages */
+    coap_init_engine();
+    ringbufindex_init(&requests_ringbuf, MAX_REQUEST);
+    process_start(&coap_client_process, NULL);
+}
+
+
+
+void client_table_miss_handler(void *response){
+  const uint8_t *chunk;
+
+  int len = coap_get_payload(response, &chunk);
+
+  printf("Table miss: %.*s", len, (char *)chunk);
+}
+
+void client_topology_update_handler(void *response){
+  const uint8_t *chunk;
+
+  int len = coap_get_payload(response, &chunk);
+
+  printf("Topology update: %.*s", len, (char *)chunk);
+}
+
+PROCESS_THREAD(coap_client_process, ev, data)
+{
+  PROCESS_BEGIN();
+  while(1) {
+    PROCESS_YIELD_UNTIL(ev == PROCESS_EVENT_POLL);
+    request_t* req = get_next_request();
+    if(req != NULL){
+        if(req->type == TABLE_MISS){
+            printf("TABLE MISS\n");
+            COAP_BLOCKING_REQUEST(&server_ipaddr, REMOTE_PORT, &req->req_packet, client_table_miss_handler);
+        }
+        else if(req->type == TOPOLOGY_UPDATE){
+            printf("TOPOLOGY UPDATE\n");
+            COAP_BLOCKING_REQUEST(&server_ipaddr, REMOTE_PORT, &req->req_packet, client_topology_update_handler);
+        }
+        
+    }
+
+  }
+  PROCESS_END();
 }
