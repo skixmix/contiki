@@ -10,6 +10,7 @@
 
 PROCESS(coap_client_process, "Coap Client");
 static struct ctimer timer_ttl;
+static struct ctimer timer_topology;
 static struct ringbufindex requests_ringbuf;
 static request_t requests_array[MAX_REQUEST];
 uip_ipaddr_t server_ipaddr;
@@ -17,6 +18,16 @@ uip_ipaddr_t server_ipaddr;
 #define REMOTE_PORT     UIP_HTONS(COAP_DEFAULT_PORT)
 #define SERVER_NODE(ipaddr)   uip_ip6addr(ipaddr, 0xfd00, 0, 0, 0, 0, 0, 0, 0x0001) 
 
+#define PRINTADDR(addr) printf(" %02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x ", ((uint8_t *)addr)[0], ((uint8_t *)addr)[1], ((uint8_t *)addr)[2], ((uint8_t *)addr)[3], ((uint8_t *)addr)[4], ((uint8_t *)addr)[5], ((uint8_t *)addr)[6], ((uint8_t *)addr)[7])
+#define ADD_BYTE(buf, byte) *buf = byte
+#define URI_QUERY_MAC_ADDR(buffer, addr) sprintf(buffer,"?mac=%02x%02x%02x%02x%02x%02x%02x%02x", ((uint8_t *)addr)[0], ((uint8_t *)addr)[1], ((uint8_t *)addr)[2], ((uint8_t *)addr)[3], ((uint8_t *)addr)[4], ((uint8_t *)addr)[5], ((uint8_t *)addr)[6], ((uint8_t *)addr)[7])
+
+static uint8_t payload[MAX_DIM_PAYLOAD];
+static char uri_query[64];
+
+const uint8_t msg[] = {0x84, 0x01, 0x18, 0x5f, 0x18, 0x2a, 0xa2, \
+                    0x48, 0x02, 0x00, 0x01, 0x00, 0x00, 0x40, 0x00, 0x01, 0x82, 0x18, 0x3e, 0x18, 0x3a, \
+                    0x48, 0x04, 0x02, 0x00, 0x00, 0x05, 0x00, 0x00, 0x02, 0x82, 0x18, 0x3e, 0x18, 0x3a};
 
 void start_request(void){
     process_poll(&coap_client_process);
@@ -185,23 +196,84 @@ static void callback_decrement_ttl(void *ptr){
             entry = entry->next;
     }
     
-    /* prepare request, TID is set by COAP_BLOCKING_REQUEST() */
-    request_t* req = add_request();
-    if(req != NULL){
-        coap_init_message(&req->req_packet, COAP_TYPE_CON, COAP_GET, 0);
-        coap_set_header_uri_path(&req->req_packet, "Network");
-        req->type = TOPOLOGY_UPDATE;
-        printf("Created request\n");
-        //const char msg[] = "Toggle!";
+    
+}
 
-        //coap_set_payload(request, (uint8_t *)msg, sizeof(msg) - 1);
+void inline add_byte(uint8_t *buf, uint8_t byte){
+    *buf = byte;
+}
+
+uint8_t prepare_payload_top_update(){
+    uip_ds6_nbr_t *nbr;
+    uip_lladdr_t *lladdr;
+    struct link_stats * stats;
+    uint8_t num_of_neigh = 0;
+    uint8_t payload_dim = 0;
+    uint16_t rssi, etx;
+    
+    add_byte(payload, 0x84);        //Cbor's major type: Array of 4 data items
+    add_byte(payload+1, 0x01);        //Integer lower than 24: Version (1)
+    add_byte(payload+2, 0x18);        //Cbor's major type: Integer on 1 byte
+    add_byte(payload+3, 60);          //Battery level
+    add_byte(payload+4, 0x18);        //Cbor's major type: Integer on 1 byte
+    add_byte(payload+5, 30);          //Queue utilization
+    payload_dim = 7;
+    
+    for(nbr = nbr_table_head(ds6_neighbors); nbr != NULL; nbr = nbr_table_next(ds6_neighbors, nbr)) {
+        num_of_neigh++;
+        lladdr = uip_ds6_nbr_get_ll(nbr);        
+	stats = link_stats_from_lladdr(lladdr);
+        rssi = stats->rssi;
+        etx = stats->etx;
+        add_byte(payload+payload_dim, 0x48);
+        payload_dim++;
+        memcpy(payload+payload_dim, lladdr, 8);
+        payload_dim+=8;
+        add_byte(payload+payload_dim, 0x82);
+        payload_dim++;
+        add_byte(payload+payload_dim, 0x19);
+        payload_dim++;
+        memcpy(payload+payload_dim, &rssi, 2);
+        payload_dim+=2;
+        add_byte(payload+payload_dim, 0x19);
+        payload_dim++;
+        memcpy(payload+payload_dim, &etx, 2);
+        payload_dim+=2;
+    }
+    add_byte(payload+6, 0xa0 | num_of_neigh);
+    return payload_dim;
+}
+
+static void topology_update(void *ptr){
+    request_t* req = NULL;
+    linkaddr_t* nodeAddr = &linkaddr_node_addr;
+    uint8_t payload_dim = 0;
+    
+    ctimer_reset(&timer_topology);
+    req = add_request();
+    if(req != NULL){
+        //Set type of message: CON and POST
+        coap_init_message(&req->req_packet, COAP_TYPE_CON, COAP_POST, 0);
+        //Set the target resource 
+        coap_set_header_uri_path(&req->req_packet, "Network");
+        //Set the query parameter: "?mac=<node's mac address>"
+        URI_QUERY_MAC_ADDR(uri_query, nodeAddr);
+        coap_set_header_uri_query(&req->req_packet, uri_query);
+        //Set the type of request needed to the working process in order to select the right callback function
+        req->type = TOPOLOGY_UPDATE;
+        //Set payload type and the actual content
+        coap_set_header_content_format(&req->req_packet, APPLICATION_CBOR);
+        payload_dim = prepare_payload_top_update();        
+        coap_set_payload(&req->req_packet, payload, payload_dim);
 
     }
     start_request();
 }
+
  
 void control_agent_init(){
     ctimer_set(&timer_ttl, TTL_INTERVAL, callback_decrement_ttl, NULL);
+    ctimer_set(&timer_topology, TOP_UPDATE_PERIOD, topology_update, NULL);
     flowtable_init();
     flowtable_test();
     

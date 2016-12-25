@@ -18,9 +18,14 @@
 #include "net/rpl/rpl.h"
 #include "sys/ctimer.h"
 #include "er-coap-engine.h"
+#include "net/linkaddr.h"
+#include "net/nbr-table.h"
+#include "net/link-stats.h"
 
 
-#define TTL_INTERVAL		(60 * CLOCK_SECOND)
+#define TTL_INTERVAL		(1 * CLOCK_SECOND)
+#define TOP_UPDATE_PERIOD       (60 * CLOCK_SECOND)
+#define MAX_DIM_PAYLOAD         128                 
 #define MAX_REQUEST             4       //Must be a power of two
 
 typedef enum {
