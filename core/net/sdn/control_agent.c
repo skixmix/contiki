@@ -199,8 +199,18 @@ static void callback_decrement_ttl(void *ptr){
     
 }
 
-void inline add_byte(uint8_t *buf, uint8_t byte){
-    *buf = byte;
+
+void handleTableMiss(uint8_t ptr_to_pkt){
+    
+}
+
+uint8_t computeNumOfNeighbours(){
+    uint8_t num_of_neigh = 0;
+    uip_ds6_nbr_t *nbr;
+    for(nbr = nbr_table_head(ds6_neighbors); nbr != NULL; nbr = nbr_table_next(ds6_neighbors, nbr)) {
+        num_of_neigh++;
+    }
+    return num_of_neigh;
 }
 
 uint8_t prepare_payload_top_update(){
@@ -209,39 +219,51 @@ uint8_t prepare_payload_top_update(){
     struct link_stats * stats;
     uint8_t num_of_neigh = 0;
     uint8_t payload_dim = 0;
-    uint16_t rssi, etx;
+    uint16_t etx;
+    int16_t rssi;
+    //These are the Cbor structures for the first part of the POST payload and for each neighbour node.
+    //Where there is 0x00 it means that it is a field which will be set later.
+    uint8_t header[] = {0x84, 0x00, 0x18, 0x00, 0x18, 0x00, 0x00};
+    uint8_t neighbour[] = {0x48, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x82, 0x39, 0x00, 0x00, 0x19, 0x00, 0x00};
     
-    add_byte(payload, 0x84);        //Cbor's major type: Array of 4 data items
-    add_byte(payload+1, 0x01);        //Integer lower than 24: Version (1)
-    add_byte(payload+2, 0x18);        //Cbor's major type: Integer on 1 byte
-    add_byte(payload+3, 60);          //Battery level
-    add_byte(payload+4, 0x18);        //Cbor's major type: Integer on 1 byte
-    add_byte(payload+5, 30);          //Queue utilization
-    payload_dim = 7;
+    //Get the number of neighbours, if it is 0 don't send any update to the Controller then
+    num_of_neigh = computeNumOfNeighbours();
+    if(num_of_neigh == 0)
+        return 0;
+    //Set the state information regarding the sending node  
+    header[1] = 1;                  //Version of the update structure
+    header[3] = 60;                 //Battery level
+    header[5] = 30;                 //Queue utilization
+    //Set the Cbor major type "Array" with the number of items
+    header[6] = 0xa0 | num_of_neigh;
+    //Copy the first part of the POST payload
+    memcpy(payload, header, sizeof(header));
+    payload_dim = sizeof(header);
     
+    //Scan the neighbours table 
     for(nbr = nbr_table_head(ds6_neighbors); nbr != NULL; nbr = nbr_table_next(ds6_neighbors, nbr)) {
         num_of_neigh++;
-        lladdr = uip_ds6_nbr_get_ll(nbr);        
+        //Get the neighbour's MAC address
+        lladdr = uip_ds6_nbr_get_ll(nbr); 
+        //And its stats
 	stats = link_stats_from_lladdr(lladdr);
-        rssi = stats->rssi;
+        rssi = (int16_t)-1 - stats->rssi;                   //This is needed because of the Cbor negative integer representation
         etx = stats->etx;
-        add_byte(payload+payload_dim, 0x48);
-        payload_dim++;
-        memcpy(payload+payload_dim, lladdr, 8);
-        payload_dim+=8;
-        add_byte(payload+payload_dim, 0x82);
-        payload_dim++;
-        add_byte(payload+payload_dim, 0x19);
-        payload_dim++;
-        memcpy(payload+payload_dim, &rssi, 2);
-        payload_dim+=2;
-        add_byte(payload+payload_dim, 0x19);
-        payload_dim++;
-        memcpy(payload+payload_dim, &etx, 2);
-        payload_dim+=2;
+        //Set the neighbour's MAC address into the Cbor structure
+        memcpy(neighbour+1, lladdr, 8);
+        //Set RSSI and ETX relative to the neighbour node
+        neighbour[11] = rssi << 8;
+        neighbour[12] = rssi & ((1 << 8) - 1);
+        neighbour[14] = etx << 8;
+        neighbour[15] = etx & ((1 << 8) - 1);
+        //Copy the Cbor structure into the POST payload
+        memcpy(payload+payload_dim, neighbour, sizeof(neighbour));
+        payload_dim += sizeof(neighbour);
     }
-    add_byte(payload+6, 0xa0 | num_of_neigh);
+    
+    
     return payload_dim;
+    
 }
 
 static void topology_update(void *ptr){
@@ -263,7 +285,9 @@ static void topology_update(void *ptr){
         req->type = TOPOLOGY_UPDATE;
         //Set payload type and the actual content
         coap_set_header_content_format(&req->req_packet, APPLICATION_CBOR);
-        payload_dim = prepare_payload_top_update();        
+        payload_dim = prepare_payload_top_update();   
+        if(payload_dim == 0)
+            return;
         coap_set_payload(&req->req_packet, payload, payload_dim);
 
     }
