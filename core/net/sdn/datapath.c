@@ -69,7 +69,7 @@ uint8_t* getFieldPtr(field_t field, uint8_t* dim){
             return packetbuf_addr(PACKETBUF_ADDR_RECEIVER);
         case MH_SRC_ADDR:
             if(pktHasMeshHeader(ptr_to_packet)){
-                if(BIT_IS_SET(*ptr_to_packet, MESH_V_FLAG))
+                if(!BIT_IS_SET(*ptr_to_packet, MESH_V_FLAG))
                     *dim = LINKADDR_SIZE;
                 else
                     *dim = 2;
@@ -78,7 +78,7 @@ uint8_t* getFieldPtr(field_t field, uint8_t* dim){
             break;
         case MH_DST_ADDR:
             if(pktHasMeshHeader(ptr_to_packet)){
-                if(BIT_IS_SET(*ptr_to_packet, MESH_F_FLAG))
+                if(!BIT_IS_SET(*ptr_to_packet, MESH_F_FLAG))
                     *dim = LINKADDR_SIZE;
                 else
                     *dim = 2;
