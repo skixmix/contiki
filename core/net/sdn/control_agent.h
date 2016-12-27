@@ -25,7 +25,7 @@
 
 #define TTL_INTERVAL		(1 * CLOCK_SECOND)
 #define TOP_UPDATE_PERIOD       (60 * CLOCK_SECOND)
-#define MAX_DIM_PAYLOAD         128                 
+#define MAX_DIM_PAYLOAD         PACKETBUF_SIZE                 
 #define MAX_REQUEST             4       //Must be a power of two
 
 typedef enum {

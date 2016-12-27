@@ -31,7 +31,7 @@ uip_ipaddr_t server_ipaddr;
 #define URI_QUERY_ALL_PACKET(buffer, addr) sprintf(buffer,"?type=all&mac=%02x%02x%02x%02x%02x%02x%02x%02x", ((uint8_t *)addr)[0], ((uint8_t *)addr)[1], ((uint8_t *)addr)[2], ((uint8_t *)addr)[3], ((uint8_t *)addr)[4], ((uint8_t *)addr)[5], ((uint8_t *)addr)[6], ((uint8_t *)addr)[7])
 
 static uint8_t payload[MAX_DIM_PAYLOAD];
-static char uri_query[70];
+static char uri_query[50];
 
 const uint8_t msg[] = {0x84, 0x01, 0x18, 0x5f, 0x18, 0x2a, 0xa2, \
                     0x48, 0x02, 0x00, 0x01, 0x00, 0x00, 0x40, 0x00, 0x01, 0x82, 0x18, 0x3e, 0x18, 0x3a, \
@@ -43,7 +43,6 @@ void start_request(void){
 
 request_t* add_request(void){
   int index = ringbufindex_peek_put(&requests_ringbuf);
-  printf("ADD INDEX=%i\n", index);
   if(index != -1){
       ringbufindex_put(&requests_ringbuf);
       return &requests_array[index];
@@ -53,7 +52,6 @@ request_t* add_request(void){
 
 request_t* get_next_request(void){
   int index = ringbufindex_get(&requests_ringbuf);
-  printf("GET INDEX=%i\n", index);
   if(index != -1){
       return &requests_array[index];
   }
@@ -220,13 +218,13 @@ void handleTableMiss(linkaddr_t* L2_receiver, linkaddr_t* L2_sender, uint8_t* pt
         //Set the query parameter: "?type=all_packet&tx_mac=<L2 sender's mac address>&rx_mac=<L2 receiver's mac address>"
         //URI_QUERY_ALL_PACKET(uri_query, L2_sender, L2_receiver);
         URI_QUERY_ALL_PACKET(uri_query, L2_receiver);
-        printf("QUERY: %s\n", uri_query);
         coap_set_header_uri_query(&req->req_packet, uri_query);        
         //Set the type of request needed to the working process in order to select the right callback function
         req->type = TABLE_MISS;
         
         //Set payload type and the actual content
-        //coap_set_payload(&req->req_packet, ptr_to_pkt, pkt_dim);
+        memcpy(payload, ptr_to_pkt, pkt_dim);
+        coap_set_payload(&req->req_packet, payload, pkt_dim);
         
     }
     start_request();
