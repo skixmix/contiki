@@ -7,6 +7,19 @@
 
 #include "datapath.h"
 
+
+#define DEBUG 0
+#if DEBUG
+#include <stdio.h>
+#define PRINTF(...) printf(__VA_ARGS__)
+#define PRINT6ADDR(addr) PRINTF("[%02x%02x:%02x%02x:%02x%02x:%02x%02x:%02x%02x:%02x%02x:%02x%02x:%02x%02x]", ((uint8_t *)addr)[0], ((uint8_t *)addr)[1], ((uint8_t *)addr)[2], ((uint8_t *)addr)[3], ((uint8_t *)addr)[4], ((uint8_t *)addr)[5], ((uint8_t *)addr)[6], ((uint8_t *)addr)[7], ((uint8_t *)addr)[8], ((uint8_t *)addr)[9], ((uint8_t *)addr)[10], ((uint8_t *)addr)[11], ((uint8_t *)addr)[12], ((uint8_t *)addr)[13], ((uint8_t *)addr)[14], ((uint8_t *)addr)[15])
+#define PRINTLLADDR(lladdr) PRINTF("[%02x:%02x:%02x:%02x:%02x:%02x]", (lladdr)->addr[0], (lladdr)->addr[1], (lladdr)->addr[2], (lladdr)->addr[3], (lladdr)->addr[4], (lladdr)->addr[5])
+#else
+#define PRINTF(...)
+#define PRINT6ADDR(addr)
+#define PRINTLLADDR(addr)
+#endif
+
 /*-----------Utility functions----------*/
 #define BIT(bit) (1 << bit)
 #define BIT_IS_SET(val, bit) (((val & (1 << bit)) >> bit) == 1)
@@ -206,7 +219,7 @@ uint8_t evaluateRule(rule_t* rule){
         //bits window is stored from the first byte of the copy_buffer
         res = applyMask(rule->size, rule->offset % 8, copy_buffer, buf_occupation);
         if(res != 1){
-            printf("Datapath - applyMask: error in applying the mask\n");
+            PRINTF("Datapath - applyMask: error in applying the mask\n");
             return 0;
         }
     }
@@ -215,13 +228,13 @@ uint8_t evaluateRule(rule_t* rule){
         //Copy the value of the field into the copy_buffer
         res = getFieldFromPacket(rule->field, copy_buffer, &buf_occupation);
         if(res != 1){
-            printf("Datapath - evaluateRule: the field is not present\n");
+            PRINTF("Datapath - evaluateRule: the field is not present\n");
             return 0;
         }
         //Apply the bits mask as specified by the size and offset fields
         res = applyMask(rule->size, rule->offset, copy_buffer, buf_occupation);
         if(res != 1){
-            printf("Datapath - applyMask: error in applying the mask\n");
+            PRINTF("Datapath - applyMask: error in applying the mask\n");
             return 0;
         }
     }
@@ -229,12 +242,12 @@ uint8_t evaluateRule(rule_t* rule){
     
     //DEBUG
     if(rule->size <= 8)
-        printf(" %02x",rule->value.byte);
+        PRINTF(" %02x",rule->value.byte);
     else
-        print_ll_addr(rule->value.bytes);
-    printf("\n");
-    print_ll_addr(copy_buffer);
-    printf("\n");
+        PRINTLLADDR(rule->value.bytes);
+    PRINTF("\n");
+    PRINTLLADDR(copy_buffer);
+    PRINTF("\n");
     //DEBUG
     
     //Carry out the actual comparison
@@ -283,9 +296,9 @@ uint8_t forward_action(action_t* action){
     if(action == NULL || action->size != 64 || action->value.bytes == NULL)
         return 0;
         
-    printf("FORWARD TO: ");
+    PRINTF("FORWARD TO: ");
     print_ll_addr(action->value.bytes);
-    printf("\n");    
+    PRINTF("\n");    
     
     //Set the next hop mac address
     packetbuf_set_addr(PACKETBUF_ADDR_RECEIVER, action->value.bytes);
@@ -368,7 +381,7 @@ uint8_t modify_action(action_t* action){
     else
         ret = write_field(field_ptr, dimField, action->value.bytes, action->size, action->offset);
     if(ret == 0)
-        printf("Datapath - modify_action: failed while writing the new value");
+        PRINTF("Datapath - modify_action: failed while writing the new value");
     return ret;
 }
 
@@ -415,20 +428,20 @@ int matchPacket(){
     ptr_to_packet = packetbuf_dataptr();
     L2_sender = packetbuf_addr(PACKETBUF_ADDR_SENDER);
     L2_receiver = packetbuf_addr(PACKETBUF_ADDR_RECEIVER);
-    printf("MATCH PACKET:\n");
+    PRINTF("MATCH PACKET:\n");
     //Scan the entire flow table, one entry at a time 
     for(entry = getFlowTableHead(); entry != NULL; entry = entry->next){
         continue_flag = 0;
         //DEBUG
         print_entry(entry);
-        printf("\n");
+        PRINTF("\n");
         //Check if every condition is satisfied
         for(rule = list_head(entry->rules); rule != NULL; rule = rule->next){
             //Assess the rule
             result = evaluateRule(rule);
             if(result == 0) //If the rule is not satisfied, go to the next entry
                 break;
-            printf("MATCH!\n");
+            PRINTF("MATCH!\n");
         }
         if(rule != NULL)    //This means that at least one rule has not been satisfied
             continue;

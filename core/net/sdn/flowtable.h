@@ -15,13 +15,6 @@
 #include <string.h>
 #include "net/sdn/datapath.h"
 
-#define DEBUG 1
-#if DEBUG && (!SINK || DEBUG_SINK)
-#include <stdio.h>
-#define PRINTF(...) printf(__VA_ARGS__)
-#else
-#define PRINTF(...)
-#endif
 
 /*-------------------------Constants definition-------------------------------*/
 

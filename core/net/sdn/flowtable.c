@@ -9,6 +9,13 @@
 #include "flowtable.h"
 
 
+#define DEBUG 0
+#if DEBUG && (!SINK || DEBUG_SINK)
+#include <stdio.h>
+#define PRINTF(...) printf(__VA_ARGS__)
+#else
+#define PRINTF(...)
+#endif
 
 LIST(flowtable);
 MEMB(entries_memb, entry_t, MAX_NUM_ENTRIES);
