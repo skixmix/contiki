@@ -14,10 +14,10 @@
 #define SET_BIT(val, bit)  (val = (val | (1 << bit)))
 
 /*--------------Constants---------------*/
-#define MESH_V_FLAG                 5
-#define MESH_F_FLAG                 4
-#define MESH_FINAL_ADDR             1
-#define MESH_ORIGINATOR_ADDR(F_bit) MESH_FINAL_ADDR + ((F_bit == 1) ? 8 : 2)
+#define MESH_ORIGINATOR_ADDR        1 
+#define MESH_FINAL_ADDR             9
+#define MESH_V_FLAG                 4
+#define MESH_F_FLAG                 5
 
 
 uint8_t status_register[STATUS_REGISTER_SIZE];
@@ -73,7 +73,7 @@ uint8_t* getFieldPtr(field_t field, uint8_t* dim){
                     *dim = LINKADDR_SIZE;
                 else
                     *dim = 2;
-                return ptr_to_packet + MESH_ORIGINATOR_ADDR(BIT_IS_SET(*ptr_to_packet, MESH_F_FLAG));
+                return ptr_to_packet + MESH_ORIGINATOR_ADDR;
             }
             break;
         case MH_DST_ADDR:

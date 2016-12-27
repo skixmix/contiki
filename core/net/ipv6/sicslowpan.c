@@ -610,10 +610,10 @@ compress_addr_64(uint8_t bitpos, uip_ipaddr_t *ipaddr, uip_lladdr_t *lladdr)
 
 /*--------------Constants---------------*/
 #define MAX_NUM_ROUTE_OVER_ADDRS    5
-#define MESH_FINAL_ADDR             1
-#define MESH_ORIGINATOR_ADDR(F_bit) MESH_FINAL_ADDR + ((F_bit == 1) ? 2 : 8)
-#define MESH_V_FLAG                 5
-#define MESH_F_FLAG                 4
+#define MESH_ORIGINATOR_ADDR        1 
+#define MESH_FINAL_ADDR             9
+#define MESH_V_FLAG                 4
+#define MESH_F_FLAG                 5
 #define MESH_DEFAULT_HL             0x0e    /* xxxx1110 */
 uip_ipaddr_t routeOverAddrList[MAX_NUM_ROUTE_OVER_ADDRS];
 
@@ -673,6 +673,23 @@ uint8_t parseMeshHeader(uint8_t* ptr_to_packet, uint8_t* hopLimit,
     /*----------Parse the Hop Limit field---------*/
     if(hopLimit != NULL)
         *hopLimit = (*ptr) & ((1 << 4) - 1);
+    
+    /*----------Parse the Originator Address-----------*/
+    if(!BIT_IS_SET(*ptr, MESH_V_FLAG)){  //64-bit long originator address
+        if(origAddr != NULL) 
+            memcpy(origAddr, ptr + MESH_ORIGINATOR_ADDR, LINKADDR_SIZE);
+        meshHeaderSize += LINKADDR_SIZE;
+        if(origAddrDim != NULL)
+            *origAddrDim = LINKADDR_SIZE;
+    }
+    else{                               //16-bit long originator address
+        if(origAddr != NULL) 
+            memcpy(origAddr + 6, ptr + MESH_ORIGINATOR_ADDR, 2);
+        meshHeaderSize += 2;
+        if(origAddrDim != NULL)
+            *origAddrDim = 2;
+    }
+    
     /*----------Parse the Final Address-----------*/
     if(!BIT_IS_SET(*ptr, MESH_F_FLAG)){  //64-bit long final address
         if(finalAddr != NULL)  
@@ -687,33 +704,10 @@ uint8_t parseMeshHeader(uint8_t* ptr_to_packet, uint8_t* hopLimit,
         meshHeaderSize += 2;
         if(finalAddrDim != NULL)
             *finalAddrDim = 2;
-    }
-    /*----------Parse the Originator Address-----------*/
-    if(!BIT_IS_SET(*ptr, MESH_V_FLAG)){  //64-bit long originator address
-        if(origAddr != NULL) 
-            memcpy(origAddr, ptr + MESH_ORIGINATOR_ADDR(BIT_IS_SET(*ptr, MESH_F_FLAG)), LINKADDR_SIZE);
-        meshHeaderSize += LINKADDR_SIZE;
-        if(origAddrDim != NULL)
-            *origAddrDim = LINKADDR_SIZE;
-    }
-    else{                               //16-bit long originator address
-        if(origAddr != NULL) 
-            memcpy(origAddr + 6, ptr + MESH_ORIGINATOR_ADDR(BIT_IS_SET(*ptr, MESH_F_FLAG)), 2);
-        meshHeaderSize += 2;
-        if(origAddrDim != NULL)
-            *origAddrDim = 2;
-    }
-    
+    }        
     return meshHeaderSize;
 }
 
-void setFinalAddr(linkaddr_t* finalAddr){
-    if(finalAddr == NULL)
-        return;
-    //TODO: parse the dispatch byte and check the bits V and F in order to derive the addresses length
-    //Assume that both addresses are 64 bits sized
-    memcpy(packetbuf_ptr + MESH_FINAL_ADDR, finalAddr->u8, LINKADDR_SIZE);
-}
 
 
 void selectFinalDestinationAddress(linkaddr_t* finalAddress, uint8_t* addrDim){
@@ -781,10 +775,12 @@ void insertMeshHeader(){
         packetbuf_hdr_len += meshHeaderSize;
         
         //Leave V and F set to 0 (this means that the addresses will be on 64 bits)
-        //Copy the final MAC address into the Mesh Header 
-        memcpy((packetbuf_ptr + MESH_FINAL_ADDR), finalAddress.u8, LINKADDR_SIZE);
+        
         //Copy the originator MAC address into the Mesh Header
-        memcpy(packetbuf_ptr + MESH_ORIGINATOR_ADDR(BIT_IS_SET(dispatch, MESH_F_FLAG)), linkaddr_node_addr.u8, LINKADDR_SIZE);
+        memcpy(packetbuf_ptr + MESH_ORIGINATOR_ADDR, linkaddr_node_addr.u8, LINKADDR_SIZE);
+        //Copy the final MAC address into the Mesh Header 
+        memcpy(packetbuf_ptr + MESH_FINAL_ADDR, finalAddress.u8, LINKADDR_SIZE);
+        
         //PRINTF("SET MESH DISPATCH: %02x\n", *packetbuf_ptr);
     }
     else if(addrDim == 2){ //Short final address
@@ -798,10 +794,11 @@ void insertMeshHeader(){
         //Set only the F flag and leave flag V equals to 0 
         //(it means final address on 16 bits and orig. address on 64 bits)
         SET_BIT(dispatch,MESH_F_FLAG);
+        //Copy the originator MAC address into the Mesh Header
+        memcpy(packetbuf_ptr + MESH_ORIGINATOR_ADDR, linkaddr_node_addr.u8, LINKADDR_SIZE);
         //Copy the final MAC address into the Mesh Header 
         memcpy(packetbuf_ptr + MESH_FINAL_ADDR, finalAddress.u8 + 6, 2);
-        //Copy the originator MAC address into the Mesh Header
-        memcpy(packetbuf_ptr + MESH_ORIGINATOR_ADDR(BIT_IS_SET(dispatch, MESH_F_FLAG)), linkaddr_node_addr.u8, LINKADDR_SIZE);
+        
         
     }
     //Set the dispatch type into the packet

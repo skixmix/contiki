@@ -351,7 +351,6 @@ uint8_t parseMeshHeader(uint8_t* ptr_to_packet, uint8_t* hopLimit,
         linkaddr_t* finalAddr, uint8_t* finalAddrDim, 
         linkaddr_t* origAddr, uint8_t* origAddrDim);
 
-void setFinalAddr(linkaddr_t* finalAddr);
 
 void extractIidFromIpAddr(linkaddr_t* llAddr, uip_ip6addr_t* ipAddr, uint8_t* addrDim);
 int copyDestIpAddress(uip_ipaddr_t* destAddr);
