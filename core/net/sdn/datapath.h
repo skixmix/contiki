@@ -13,6 +13,7 @@
 
 #include "flowtable.h"
 #include "net/sdn/sdn.h"
+#include "net/sdn/control_agent.h"
 #include "net/ipv6/sicslowpan.h"
 #include "net/packetbuf.h"
 #include "net/linkaddr.h"

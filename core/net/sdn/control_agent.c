@@ -22,8 +22,16 @@ uip_ipaddr_t server_ipaddr;
 #define ADD_BYTE(buf, byte) *buf = byte
 #define URI_QUERY_MAC_ADDR(buffer, addr) sprintf(buffer,"?mac=%02x%02x%02x%02x%02x%02x%02x%02x", ((uint8_t *)addr)[0], ((uint8_t *)addr)[1], ((uint8_t *)addr)[2], ((uint8_t *)addr)[3], ((uint8_t *)addr)[4], ((uint8_t *)addr)[5], ((uint8_t *)addr)[6], ((uint8_t *)addr)[7])
 
+/*
+#define URI_QUERY_ALL_PACKET(buffer, sdr, rcv) sprintf(buffer,"?type=all&tx=%02x%02x%02x%02x%02x%02x%02x%02x&rx=%02x%02x%02x%02x%02x%02x%02x%02x", \
+                                                        ((uint8_t *)sdr)[0], ((uint8_t *)sdr)[1], ((uint8_t *)sdr)[2], ((uint8_t *)sdr)[3], ((uint8_t *)sdr)[4], ((uint8_t *)sdr)[5], ((uint8_t *)sdr)[6], ((uint8_t *)sdr)[7], \
+                                                        ((uint8_t *)rcv)[0], ((uint8_t *)rcv)[1], ((uint8_t *)rcv)[2], ((uint8_t *)rcv)[3], ((uint8_t *)rcv)[4], ((uint8_t *)rcv)[5], ((uint8_t *)rcv)[6], ((uint8_t *)rcv)[7])
+*/
+
+#define URI_QUERY_ALL_PACKET(buffer, addr) sprintf(buffer,"?type=all&mac=%02x%02x%02x%02x%02x%02x%02x%02x", ((uint8_t *)addr)[0], ((uint8_t *)addr)[1], ((uint8_t *)addr)[2], ((uint8_t *)addr)[3], ((uint8_t *)addr)[4], ((uint8_t *)addr)[5], ((uint8_t *)addr)[6], ((uint8_t *)addr)[7])
+
 static uint8_t payload[MAX_DIM_PAYLOAD];
-static char uri_query[64];
+static char uri_query[70];
 
 const uint8_t msg[] = {0x84, 0x01, 0x18, 0x5f, 0x18, 0x2a, 0xa2, \
                     0x48, 0x02, 0x00, 0x01, 0x00, 0x00, 0x40, 0x00, 0x01, 0x82, 0x18, 0x3e, 0x18, 0x3a, \
@@ -200,13 +208,36 @@ static void callback_decrement_ttl(void *ptr){
 }
 
 
-void handleTableMiss(uint8_t ptr_to_pkt){
-    
+void handleTableMiss(linkaddr_t* L2_receiver, linkaddr_t* L2_sender, uint8_t* ptr_to_pkt, uint16_t pkt_dim){
+    request_t* req = NULL;
+    uint8_t payload_dim = 0;
+    req = add_request();
+    if(req != NULL){
+        //Set type of message: CON and POST
+        coap_init_message(&req->req_packet, COAP_TYPE_CON, COAP_POST, 0);
+        //Set the target resource 
+        coap_set_header_uri_path(&req->req_packet, "Flow_engine");
+        //Set the query parameter: "?type=all_packet&tx_mac=<L2 sender's mac address>&rx_mac=<L2 receiver's mac address>"
+        //URI_QUERY_ALL_PACKET(uri_query, L2_sender, L2_receiver);
+        URI_QUERY_ALL_PACKET(uri_query, L2_receiver);
+        printf("QUERY: %s\n", uri_query);
+        coap_set_header_uri_query(&req->req_packet, uri_query);        
+        //Set the type of request needed to the working process in order to select the right callback function
+        req->type = TABLE_MISS;
+        
+        //Set payload type and the actual content
+        //coap_set_payload(&req->req_packet, ptr_to_pkt, pkt_dim);
+        
+    }
+    start_request();
+
 }
 
 uint8_t computeNumOfNeighbours(){
     uint8_t num_of_neigh = 0;
     uip_ds6_nbr_t *nbr;
+    if(ds6_neighbors == NULL)
+        return 0;
     for(nbr = nbr_table_head(ds6_neighbors); nbr != NULL; nbr = nbr_table_next(ds6_neighbors, nbr)) {
         num_of_neigh++;
     }
@@ -297,7 +328,7 @@ static void topology_update(void *ptr){
  
 void control_agent_init(){
     ctimer_set(&timer_ttl, TTL_INTERVAL, callback_decrement_ttl, NULL);
-    ctimer_set(&timer_topology, TOP_UPDATE_PERIOD, topology_update, NULL);
+    //ctimer_set(&timer_topology, TOP_UPDATE_PERIOD, topology_update, NULL);
     flowtable_init();
     flowtable_test();
     
@@ -312,38 +343,41 @@ void control_agent_init(){
 
 void client_table_miss_handler(void *response){
   const uint8_t *chunk;
-
+  if(response == NULL)
+      return;
   int len = coap_get_payload(response, &chunk);
-
+  if(len == 0)
+      return;
   printf("Table miss: %.*s", len, (char *)chunk);
 }
 
 void client_topology_update_handler(void *response){
   const uint8_t *chunk;
-
+  if(response == NULL)
+      return;
   int len = coap_get_payload(response, &chunk);
-
+  if(len == 0)
+      return;
   printf("Topology update: %.*s", len, (char *)chunk);
 }
 
-PROCESS_THREAD(coap_client_process, ev, data)
-{
-  PROCESS_BEGIN();
-  while(1) {
-    PROCESS_YIELD_UNTIL(ev == PROCESS_EVENT_POLL);
-    request_t* req = get_next_request();
-    if(req != NULL){
-        if(req->type == TABLE_MISS){
-            printf("TABLE MISS\n");
-            COAP_BLOCKING_REQUEST(&server_ipaddr, REMOTE_PORT, &req->req_packet, client_table_miss_handler);
-        }
-        else if(req->type == TOPOLOGY_UPDATE){
-            printf("TOPOLOGY UPDATE\n");
-            COAP_BLOCKING_REQUEST(&server_ipaddr, REMOTE_PORT, &req->req_packet, client_topology_update_handler);
-        }
+PROCESS_THREAD(coap_client_process, ev, data){
+    request_t* req;
+    PROCESS_BEGIN();
+    while(1) {
+        PROCESS_YIELD_UNTIL(ev == PROCESS_EVENT_POLL);
+        req = get_next_request();
+        if(req != NULL){
+            if(req->type == TABLE_MISS){
+                printf("TABLE MISS\n");
+                COAP_BLOCKING_REQUEST(&server_ipaddr, REMOTE_PORT, &req->req_packet, client_table_miss_handler);
+            }
+            else if(req->type == TOPOLOGY_UPDATE){
+                printf("TOPOLOGY UPDATE\n");
+                COAP_BLOCKING_REQUEST(&server_ipaddr, REMOTE_PORT, &req->req_packet, client_topology_update_handler);
+            }
         
+        }
     }
-
-  }
-  PROCESS_END();
+    PROCESS_END();
 }

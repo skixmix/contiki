@@ -410,7 +410,11 @@ int matchPacket(){
     action_t* action;
     uint8_t result;
     uint8_t continue_flag;
+    linkaddr_t* L2_sender, *L2_receiver;
+    
     ptr_to_packet = packetbuf_dataptr();
+    L2_sender = packetbuf_addr(PACKETBUF_ADDR_SENDER);
+    L2_receiver = packetbuf_addr(PACKETBUF_ADDR_RECEIVER);
     printf("MATCH PACKET:\n");
     //Scan the entire flow table, one entry at a time 
     for(entry = getFlowTableHead(); entry != NULL; entry = entry->next){
@@ -440,9 +444,9 @@ int matchPacket(){
         if(continue_flag != 1)
             break;
     }
-    /* TODO activate the table miss handling
+    
     if(entry == NULL)   //This means that the entire table has been looked up
-        tableMiss();    //without finding any right entry for this packet
-    */
+        handleTableMiss(L2_receiver, L2_sender, ptr_to_packet, packetbuf_totlen());    //without finding any right entry for this packet
+    
 }
 

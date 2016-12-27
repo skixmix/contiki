@@ -29,6 +29,7 @@
 #define MAX_REQUEST             4       //Must be a power of two
 
 typedef enum {
+    NONE,
     TABLE_MISS,
     TOPOLOGY_UPDATE
 } request_type_t;
@@ -38,6 +39,7 @@ typedef struct request{
     request_type_t type;
 } request_t;
 
+void handleTableMiss(linkaddr_t* L2_receiver, linkaddr_t* L2_sender, uint8_t* ptr_to_pkt, uint16_t pkt_dim);
 void sdn_callback_neighbor(const linkaddr_t *addr);
 void control_agent_init();
 

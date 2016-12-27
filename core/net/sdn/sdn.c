@@ -12,6 +12,7 @@
 #include "net/packetbuf.h"
 #include "net/ip/uip-debug.h"
 #include "net/ipv6/sicslowpan.h"
+#include "net/linkaddr.h"
 
 #define DEBUG 1
 #if DEBUG
@@ -46,8 +47,7 @@ sdn_init(void)
     memset(meshAddrList, 0, sizeof(linkaddr_t) * MAX_NUM_MESH_ADDRS);
     rpl_config = RPL_BYPASS;
     nodeMAC = &linkaddr_node_addr;
-    linkaddr_copy(&meshAddrList[0], nodeMAC); 
-    
+    linkaddr_copy(&meshAddrList[0], nodeMAC);     
 }
 
 int isRPLMulticast(uip_ipaddr_t* ipAddr){

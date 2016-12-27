@@ -619,12 +619,6 @@ void flowtable_test(){
         add_action_to_entry(entry, action);
         add_entry_to_ft(entry);
         
-        entry = create_entry(1);
-        rule = create_rule(MH_DST_ADDR, 0, 64, EQUAL, addr_4);
-        action= create_action(FORWARD, NO_FIELD, 0, 64, addr_3);
-        add_rule_to_entry(entry, rule);    
-        add_action_to_entry(entry, action);
-        add_entry_to_ft(entry);
     }
     
     if(memcmp(&linkaddr_node_addr, addr_3, 8) == 0){
