@@ -21,11 +21,11 @@
 #include "net/linkaddr.h"
 #include "net/nbr-table.h"
 #include "net/link-stats.h"
-
+//#include "dev/battery-sensor.h"
 
 #define TTL_INTERVAL		(1 * CLOCK_SECOND)
 #define TOP_UPDATE_PERIOD       (60 * CLOCK_SECOND)
-#define MAX_DIM_PAYLOAD         PACKETBUF_SIZE                 
+#define MAX_DIM_PAYLOAD         8 + (16 * NBR_TABLE_CONF_MAX_NEIGHBORS)                 
 #define MAX_REQUEST             4       //Must be a power of two
 
 typedef enum {
