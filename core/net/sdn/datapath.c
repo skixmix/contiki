@@ -13,7 +13,7 @@
 #include <stdio.h>
 #define PRINTF(...) printf(__VA_ARGS__)
 #define PRINT6ADDR(addr) PRINTF("[%02x%02x:%02x%02x:%02x%02x:%02x%02x:%02x%02x:%02x%02x:%02x%02x:%02x%02x]", ((uint8_t *)addr)[0], ((uint8_t *)addr)[1], ((uint8_t *)addr)[2], ((uint8_t *)addr)[3], ((uint8_t *)addr)[4], ((uint8_t *)addr)[5], ((uint8_t *)addr)[6], ((uint8_t *)addr)[7], ((uint8_t *)addr)[8], ((uint8_t *)addr)[9], ((uint8_t *)addr)[10], ((uint8_t *)addr)[11], ((uint8_t *)addr)[12], ((uint8_t *)addr)[13], ((uint8_t *)addr)[14], ((uint8_t *)addr)[15])
-#define PRINTLLADDR(lladdr) PRINTF("[%02x:%02x:%02x:%02x:%02x:%02x]", (lladdr)->addr[0], (lladdr)->addr[1], (lladdr)->addr[2], (lladdr)->addr[3], (lladdr)->addr[4], (lladdr)->addr[5])
+#define PRINTLLADDR(addr) PRINTF("[%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x]", ((uint8_t *)addr)[0], ((uint8_t *)addr)[1], ((uint8_t *)addr)[2], ((uint8_t *)addr)[3], ((uint8_t *)addr)[4], ((uint8_t *)addr)[5], ((uint8_t *)addr)[6], ((uint8_t *)addr)[7])
 #else
 #define PRINTF(...)
 #define PRINT6ADDR(addr)
@@ -297,7 +297,7 @@ uint8_t forward_action(action_t* action){
         return 0;
         
     PRINTF("FORWARD TO: ");
-    print_ll_addr(action->value.bytes);
+    PRINTLLADDR(action->value.bytes);
     PRINTF("\n");    
     
     //Set the next hop mac address
@@ -433,7 +433,9 @@ int matchPacket(){
     for(entry = getFlowTableHead(); entry != NULL; entry = entry->next){
         continue_flag = 0;
         //DEBUG
+#if DEBUG == 1
         print_entry(entry);
+#endif
         PRINTF("\n");
         //Check if every condition is satisfied
         for(rule = list_head(entry->rules); rule != NULL; rule = rule->next){
@@ -458,8 +460,9 @@ int matchPacket(){
             break;
     }
     
-    if(entry == NULL)   //This means that the entire table has been looked up
+    if(entry == NULL){   //This means that the entire table has been looked up
+        PRINTF("TABLE MISS!\n");
         handleTableMiss(L2_receiver, L2_sender, ptr_to_packet, packetbuf_totlen());    //without finding any right entry for this packet
-    
+    }
 }
 
