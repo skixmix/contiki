@@ -308,8 +308,6 @@ static void topology_update(void *ptr){
     request_t* req = NULL;
     linkaddr_t* nodeAddr = &linkaddr_node_addr;
     uint8_t payload_dim = 0;
-    
-    ctimer_reset(&timer_topology);
     req = add_request();
     if(req != NULL){
         //Set type of message: CON and POST
@@ -329,6 +327,7 @@ static void topology_update(void *ptr){
         coap_set_payload(&req->req_packet, payload, payload_dim);
         start_request();
     }    
+    ctimer_reset(&timer_topology);
 }
 
  
@@ -346,18 +345,40 @@ void control_agent_init(){
 }
 
 
+void parse_table_miss_response(const uint8_t* chunk, int len){
+    const cn_cbor *cb;
+    cn_cbor* cp;
+    if(chunk == NULL || len == 0)
+        return;
+    cb = cn_cbor_decode(chunk, len, 0);
+    if(cb == NULL)
+        return;
+    if(cb->type == CN_CBOR_ARRAY){
+        for (cp = cb->first_child; cp; cp = cp->next) {
+            install_flow_entry_from_cbor(cp);
+        }          
+    }
+    cn_cbor_free(cp);
+}
+
 
 void client_table_miss_handler(void *response){
-  const uint8_t *chunk;
-  queuebuf_free(q);
-  q = NULL;
-  if(response == NULL)
-      return;
-  int len = coap_get_payload(response, &chunk);
-  if(len == 0)
-      return;
-  printf("Table miss: %.*s", len, (char *)chunk);
-  
+    const uint8_t *chunk;
+    int i, len;
+    queuebuf_free(q);
+    q = NULL;
+    if(response == NULL)
+        return;
+    len = coap_get_payload(response, &chunk);
+    if(len == 0)
+        return;
+    printf("Table miss: ");
+    for (i = 0; i < len; i++)
+    {
+      printf("%02x", chunk[i]);
+    }
+    printf("\n");
+    parse_table_miss_response(chunk, len);
 }
 
 void client_topology_update_handler(void *response){

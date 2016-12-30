@@ -9,7 +9,7 @@
 #include "flowtable.h"
 
 
-#define DEBUG 0
+#define DEBUG 1
 #if DEBUG && (!SINK || DEBUG_SINK)
 #include <stdio.h>
 #define PRINTF(...) printf(__VA_ARGS__)
@@ -565,6 +565,71 @@ uint8_t remove_entry(entry_t* entry_to_match){
     list_remove(flowtable, entry);
     deallocate_entry(entry);
     return 1;
+}
+
+
+void install_flow_entry_from_cbor(cn_cbor* flowEntry){
+    uint16_t priority, ttl;
+    cn_cbor *support, *child, *inner;
+    rule_t* rule;
+    action_t* action;
+    entry_t* entry;
+    field_t field;
+    uint8_t offset, size;
+    operator_t operator;
+    action_type_t actionType;
+    uint8_t* value;
+    if(flowEntry == NULL)
+        return;
+    if(flowEntry->type == CN_CBOR_ARRAY){
+        support = flowEntry->first_child;
+        priority = (uint16_t)support->v.uint;
+        support = support->next;
+        ttl = (uint16_t)support->v.uint;
+        //Create the flow entry
+        entry = create_entry(priority);
+        if(entry == NULL)
+            return;
+        entry->stats.ttl = ttl;
+        support = support->next;
+        if(support->type == CN_CBOR_ARRAY){          //Rules
+            for (child = support->first_child; child != NULL; child = child->next) {
+                if(child->type == CN_CBOR_ARRAY){
+                    inner = child->first_child;
+                    field = (field_t)inner->v.uint;
+                    inner = inner->next;
+                    operator = (operator_t)inner->v.uint;
+                    inner = inner->next;
+                    offset = (uint8_t)inner->v.uint;
+                    inner = inner->next;
+                    size = (uint8_t)inner->v.uint;
+                    inner = inner->next;
+                    value = (uint8_t*)inner->v.str;
+                    rule = create_rule(field, offset, size, operator, value);
+                }
+                add_rule_to_entry(entry, rule);
+            }  
+        }
+        support = support->next;
+        if(support->type == CN_CBOR_ARRAY){          //Actions
+            for (child = support->first_child; child != NULL; child = child->next) {
+                if(child->type == CN_CBOR_ARRAY){
+                    inner = child->first_child;
+                    actionType = (action_type_t)inner->v.uint;
+                    inner = inner->next;
+                    field = (field_t)inner->v.uint;
+                    inner = inner->next;
+                    offset = (uint8_t)inner->v.uint;
+                    inner = inner->next;
+                    size = (uint8_t)inner->v.uint;
+                    inner = inner->next;
+                    value = (uint8_t*)inner->v.str;
+                    action= create_action(actionType, field, offset, size, value);
+                }
+                add_action_to_entry(entry, action);
+            }  
+        }
+    }
 }
 
 void flowtable_test(){

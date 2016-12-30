@@ -21,6 +21,7 @@
 #include "net/linkaddr.h"
 #include "net/nbr-table.h"
 #include "net/link-stats.h"
+#include "net/sdn/cn-cbor.h"
 //#include "dev/battery-sensor.h"
 
 #define TTL_INTERVAL		(1 * CLOCK_SECOND)

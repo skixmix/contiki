@@ -14,6 +14,7 @@
 #include <stdio.h>
 #include <string.h>
 #include "net/sdn/datapath.h"
+#include "net/sdn/cn-cbor.h"
 
 
 /*-------------------------Constants definition-------------------------------*/
@@ -145,5 +146,6 @@ entry_t* find_entry(entry_t* entry_to_match);
 uint8_t remove_entry(entry_t* entry_to_match);
 void deallocate_entry(entry_t* entry);
 void flowtable_test();
+void install_flow_entry_from_cbor(cn_cbor* cp);
 #endif	/* FLOWTABLE_H */
 
