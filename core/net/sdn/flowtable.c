@@ -630,6 +630,7 @@ void install_flow_entry_from_cbor(cn_cbor* flowEntry){
             }  
         }
     }
+    add_entry_to_ft(entry);
 }
 
 void flowtable_test(){
