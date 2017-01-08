@@ -1,13 +1,6 @@
 #ifndef CN_CBOR_C
 #define CN_CBOR_C
 
-#ifdef  __cplusplus
-extern "C" {
-#endif
-#ifdef EMACS_INDENTATION_HELPER
-} /* Duh. */
-#endif
-
 
 #ifdef CONTIKI
 #define CBOR_NO_FLOAT 1
