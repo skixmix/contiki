@@ -32,7 +32,7 @@ uip_ipaddr_t server_ipaddr;
 
 static uint8_t payload[MAX_DIM_PAYLOAD];
 static char uri_query[50];
-struct queuebuf* q;
+
 
 void start_request(void){
     process_poll(&coap_client_process);
@@ -173,7 +173,7 @@ void sdn_callback_neighbor(const linkaddr_t *addr){
         deallocate_entry(entry);
     }
     else{
-        //It doesnt't exist, so add it in to the flow table
+        //It doesn't exist, so add it in to the flow table
         add_entry_to_ft(entry);
     }    
     
@@ -206,7 +206,8 @@ static void callback_decrement_ttl(void *ptr){
 void handleTableMiss(linkaddr_t* L2_receiver, linkaddr_t* L2_sender, uint8_t* ptr_to_pkt, uint16_t pkt_dim){
     request_t* req = NULL;
     uint8_t payload_dim = 0;
-    
+    linkaddr_t* nodeAddr = &linkaddr_node_addr;
+    struct queuebuf* q;
     if(queuebuf_numfree() == 0)
         return;
     q = queuebuf_new_from_packetbuf();
@@ -224,14 +225,15 @@ void handleTableMiss(linkaddr_t* L2_receiver, linkaddr_t* L2_sender, uint8_t* pt
     coap_set_header_uri_path(&req->req_packet, "Flow_engine");
     //Set the query parameter: "?type=all_packet&tx_mac=<L2 sender's mac address>&rx_mac=<L2 receiver's mac address>"
     //URI_QUERY_ALL_PACKET(uri_query, L2_sender, L2_receiver);
-    URI_QUERY_ALL_PACKET(uri_query, L2_receiver);
+    URI_QUERY_ALL_PACKET(uri_query, nodeAddr);
     coap_set_header_uri_query(&req->req_packet, uri_query);        
     //Set the type of request needed to the working process in order to select the right callback function
     req->type = TABLE_MISS;
-
+    req->payload_ptr = q;
     //Set payload type and the actual content
     //memcpy(payload, ptr_to_pkt, pkt_dim);
     coap_set_payload(&req->req_packet, queuebuf_dataptr(q), queuebuf_datalen(q));
+    queuebuf_free(req->payload_ptr);
     start_request();
 }
 
@@ -309,6 +311,11 @@ static void topology_update(void *ptr){
     linkaddr_t* nodeAddr = &linkaddr_node_addr;
     uint8_t payload_dim = 0;
     req = add_request();
+    //DEBUG
+    printf("ADDED FLOW ENTRY: ");
+    print_flowtable();
+    printf("\n");
+    //DEBUG
     if(req != NULL){
         //Set type of message: CON and POST
         coap_init_message(&req->req_packet, COAP_TYPE_CON, COAP_POST, 0);
@@ -332,14 +339,13 @@ static void topology_update(void *ptr){
 
  
 void control_agent_init(){
+    unsigned short delay = random_rand() % 10;
     ctimer_set(&timer_ttl, TTL_INTERVAL, callback_decrement_ttl, NULL);
-    ctimer_set(&timer_topology, TOP_UPDATE_PERIOD, topology_update, NULL);
+    ctimer_set(&timer_topology, TOP_UPDATE_PERIOD + delay, topology_update, NULL);
     flowtable_init();
     flowtable_test();
     
     SERVER_NODE(&server_ipaddr);
-    /* receives all CoAP messages */
-    coap_init_engine();
     ringbufindex_init(&requests_ringbuf, MAX_REQUEST);
     process_start(&coap_client_process, NULL);
 }
@@ -365,8 +371,7 @@ void parse_table_miss_response(const uint8_t* chunk, int len){
 void client_table_miss_handler(void *response){
     const uint8_t *chunk;
     int i, len;
-    queuebuf_free(q);
-    q = NULL;
+    
     if(response == NULL)
         return;
     len = coap_get_payload(response, &chunk);
@@ -392,8 +397,10 @@ void client_topology_update_handler(void *response){
 }
 
 PROCESS_THREAD(coap_client_process, ev, data){
-    request_t* req;
     PROCESS_BEGIN();
+    request_t* req;
+    /* receives all CoAP messages */
+    coap_init_engine();
     while(1) {
         PROCESS_YIELD_UNTIL(ev == PROCESS_EVENT_POLL);
         req = get_next_request();
@@ -401,6 +408,12 @@ PROCESS_THREAD(coap_client_process, ev, data){
             if(req->type == TABLE_MISS){
                 printf("TABLE MISS\n");
                 COAP_BLOCKING_REQUEST(&server_ipaddr, REMOTE_PORT, &req->req_packet, client_table_miss_handler);
+                /*
+                if(req->payload_ptr == NULL)
+                    printf("NULL\n");                    
+                else
+                    queuebuf_free(req->payload_ptr);
+                */
             }
             else if(req->type == TOPOLOGY_UPDATE){
                 printf("TOPOLOGY UPDATE\n");

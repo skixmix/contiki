@@ -36,6 +36,7 @@ typedef enum {
 } request_type_t;
 
 typedef struct request{
+    struct queuebuf* payload_ptr;
     coap_packet_t req_packet;
     request_type_t type;
 } request_t;
