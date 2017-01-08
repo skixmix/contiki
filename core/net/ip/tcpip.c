@@ -522,7 +522,7 @@ eventhandler(process_event_t ev, process_data_t data)
 void
 tcpip_input(void)
 {
-    printf("DEBUG Packet IP input\n");
+  PRINTF("tcpip_input: Packet IP input\n");
   process_post_synch(&tcpip_process, PACKET_INPUT, NULL);
   uip_clear_buf();
 }
@@ -533,7 +533,7 @@ tcpip_ipv6_output(void)
 {
   uip_ds6_nbr_t *nbr = NULL;
   uip_ipaddr_t *nexthop = NULL;
-
+  
   if(uip_len == 0) {
     return;
   }
