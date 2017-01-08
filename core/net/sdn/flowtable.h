@@ -11,7 +11,6 @@
 #include "lib/memb.h"
 #include "lib/list.h"
 #include "net/linkaddr.h"
-#include <stdio.h>
 #include <string.h>
 #include "net/sdn/datapath.h"
 #include "net/sdn/cn-cbor.h"
