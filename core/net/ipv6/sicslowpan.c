@@ -359,9 +359,6 @@ add_fragment(uint16_t tag, uint16_t frag_size, uint8_t offset)
 #else
   sender = packetbuf_addr(PACKETBUF_ADDR_SENDER);
 #endif
-  //ADDED - DEBUG
-  printf("DEBUG Add fragment tag = %u\n", tag);
-  //ADDED - DEBUG
 
   if(offset == 0) {
     /* This is a first fragment - check if we can add this */
@@ -2134,9 +2131,6 @@ input(void)
 
 #if SICSLOWPAN_CONF_FRAG
   
-  //ADDED-DEBUG
-  printf("DEBUG Input\n");
-  //ADDED-DEBUG
   
   /*
    * Since we don't support the mesh and broadcast header, the first header
@@ -2145,9 +2139,6 @@ input(void)
   switch((GET16(PACKETBUF_FRAG_PTR + packetbuf_hdr_len, PACKETBUF_FRAG_DISPATCH_SIZE) & 0xf800) >> 8) {
     case SICSLOWPAN_DISPATCH_FRAG1:
         
-  //ADDED - DEBUG
-  printf("DEBUG Frag1\n");
-  //ADDED - DEBUG
         
       PRINTFI("sicslowpan input: FRAG1 ");
       frag_offset = 0;
@@ -2173,9 +2164,6 @@ input(void)
 
       break;
     case SICSLOWPAN_DISPATCH_FRAGN:
-        //ADDED-DEBUG
-        printf("DEBUG FragN\n");
-        //ADDED-DEBUG
 
       /*
        * set offset, tag, size
@@ -2259,9 +2247,6 @@ input(void)
    * If this is a subsequent fragment, this is the contrary.
    */
         
-  //ADDED - DEBUG
-  printf("DEBUG Copy payload\n");
-  //ADDED - DEBUG
         
   if(packetbuf_datalen() < packetbuf_hdr_len) {
     PRINTF("SICSLOWPAN: packet dropped due to header > total packet\n");
