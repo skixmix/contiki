@@ -8,18 +8,25 @@
 
 #include "net/netstack.h"
 #include "net/sdn/sdn.h"
-#include <stdio.h>
 #include "net/packetbuf.h"
 #include "net/ip/uip-debug.h"
 #include "net/ipv6/sicslowpan.h"
 #include "net/linkaddr.h"
 
-#define DEBUG 1
+
+
+#define DEBUG 0
 #if DEBUG
-#define PRINTADDR(addr) printf(" %02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x ", ((uint8_t *)addr)[0], ((uint8_t *)addr)[1], ((uint8_t *)addr)[2], ((uint8_t *)addr)[3], ((uint8_t *)addr)[4], ((uint8_t *)addr)[5], ((uint8_t *)addr)[6], ((uint8_t *)addr)[7])
+#include <stdio.h>
+#define PRINTF(...) printf(__VA_ARGS__)
+#define PRINT6ADDR(addr) PRINTF("[%02x%02x:%02x%02x:%02x%02x:%02x%02x:%02x%02x:%02x%02x:%02x%02x:%02x%02x]", ((uint8_t *)addr)[0], ((uint8_t *)addr)[1], ((uint8_t *)addr)[2], ((uint8_t *)addr)[3], ((uint8_t *)addr)[4], ((uint8_t *)addr)[5], ((uint8_t *)addr)[6], ((uint8_t *)addr)[7], ((uint8_t *)addr)[8], ((uint8_t *)addr)[9], ((uint8_t *)addr)[10], ((uint8_t *)addr)[11], ((uint8_t *)addr)[12], ((uint8_t *)addr)[13], ((uint8_t *)addr)[14], ((uint8_t *)addr)[15])
+#define PRINTLLADDR(addr) PRINTF("[%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x]", ((uint8_t *)addr)[0], ((uint8_t *)addr)[1], ((uint8_t *)addr)[2], ((uint8_t *)addr)[3], ((uint8_t *)addr)[4], ((uint8_t *)addr)[5], ((uint8_t *)addr)[6], ((uint8_t *)addr)[7])
 #else
-#define PRINTADDR(addr)
+#define PRINTF(...)
+#define PRINT6ADDR(addr)
+#define PRINTLLADDR(addr)
 #endif
+
 
 #define MAX_NUM_MESH_ADDRS 5
 #define MAX_NUM_IP_ADDRS 5
@@ -110,9 +117,9 @@ input(void)
     sent_callback == NULL;
     ptr_copy = NULL;
     /*-------------------------------DEBUG--------------------------------*/
-    printf("SDN: Packet received from: ");
+    PRINTF("SDN: Packet received from: ");
     source = packetbuf_addr(PACKETBUF_ADDR_SENDER);
-    PRINTADDR(source);
+    PRINTLLADDR(source);
     
     /*------------------------------Logic------------------------------*/
     //Update link statistics
@@ -126,12 +133,12 @@ input(void)
         uint8_t origAddrDim;
         uint8_t hopLimit;
         parseMeshHeader(ptr, &hopLimit, &finalAddr, &finalAddrDim, &origAddr, &origAddrDim);
-        printf("Mesh: Hop Limit: %u", hopLimit);
-        printf(" Dim = %u Final Address: ", finalAddrDim);
-        PRINTADDR(&finalAddr);
-        printf(" Dim = %u Orig. Address: ", origAddrDim);
-        PRINTADDR(&origAddr);
-        printf("\n");
+        PRINTF("Mesh: Hop Limit: %u", hopLimit);
+        PRINTF(" Dim = %u Final Address: ", finalAddrDim);
+        PRINTLLADDR(&finalAddr);
+        PRINTF(" Dim = %u Orig. Address: ", origAddrDim);
+        PRINTLLADDR(&origAddr);
+        PRINTF("\n");
         //DEBUG
                 
         //Read the Final Address from the Mesh Header
@@ -158,7 +165,7 @@ input(void)
             //Check if this packet is addressed to me
             if(meshAddrListContains(&finalAddr) == 1){
                 //This packet must be sent to the upper layer
-                printf("Packet forwarded to 6LoWPAN layer\n");
+                PRINTF("Packet forwarded to 6LoWPAN layer\n");
                 NETSTACK_NETWORK.input();
             }
             else{
@@ -169,9 +176,9 @@ input(void)
                 const linkaddr_t new_dest = {0xc1, 0x0c, 0x00, 0x00, 0x00, 0x00, 0x00, 0x04};
                 if(linkaddr_cmp(&fixed, nodeMAC) != 0){
                     packetbuf_set_addr(PACKETBUF_ADDR_RECEIVER, &new_dest);
-                    printf("Set the Next Hop Addr = ");
-                    PRINTADDR(&new_dest);
-                    printf("\n");
+                    PRINTF("Set the Next Hop Addr = ");
+                    PRINTLLADDR(&new_dest);
+                    PRINTF("\n");
                 }
                 NETSTACK_LLSEC.send(NULL, NULL);
                 */
@@ -183,9 +190,9 @@ input(void)
         //Read the Destination Address from the IPv6 Header
         res = readIPaddr(&ipAddr);
         //DEBUG
-        printf("IP: ");
-        uip_debug_ipaddr_print(&ipAddr);
-        printf("\n");
+        PRINTF("IP: ");
+        PRINT6ADDR(&ipAddr);
+        PRINTF("\n");
         //DEBUG
         if(res == -1){
             //Something went wrong, drop the packet
@@ -225,7 +232,7 @@ input(void)
             else{
                 //If we are here it means that the packet doesn't belong 
                 //to the multicast of RPL 
-                printf(" NO RPL PKT\n");
+                PRINTF(" NO RPL PKT\n");
                 //Check if this packet is addressed to me
                 if(ipAddrListContains(&ipAddr) == 1){
                     //This packet must be sent to the upper layer
@@ -263,16 +270,16 @@ send(mac_callback_t sent, void *ptr)
     //DEBUG
     if(pktHasMeshHeader(ptr_to_pkt)){
         dest = packetbuf_addr(PACKETBUF_ADDR_RECEIVER);
-        printf("SDN: Packet is being sent to: ");
-        PRINTADDR(dest);
-        printf("\n");
+        PRINTF("SDN: Packet is being sent to: ");
+        PRINTLLADDR(dest);
+        PRINTF("\n");
         parseMeshHeader(ptr_to_pkt, &hopLimit, &finalAddr, &finalAddrDim, &origAddr, &origAddrDim);
-        printf("Mesh: Hop Limit: %u", hopLimit);
-        printf(" Dim = %u Final Address: ", finalAddrDim);
-        PRINTADDR(&finalAddr);
-        printf(" Dim = %u Orig. Address: ", origAddrDim);
-        PRINTADDR(&origAddr);
-        printf("\n");
+        PRINTF("Mesh: Hop Limit: %u", hopLimit);
+        PRINTF(" Dim = %u Final Address: ", finalAddrDim);
+        PRINTLLADDR(&finalAddr);
+        PRINTF(" Dim = %u Orig. Address: ", origAddrDim);
+        PRINTLLADDR(&origAddr);
+        PRINTF("\n");
     }
     //DEBUG
     
@@ -282,7 +289,7 @@ send(mac_callback_t sent, void *ptr)
     //res = readIPaddr(&ipAddr);
     res = copyDestIpAddress(&ipAddr);
     if(res == -1){
-        printf("SDN layer: Failed in reading the IP address");
+        PRINTF("SDN layer: Failed in reading the IP address");
         //Something went wrong, drop the packet
         return;
     }
