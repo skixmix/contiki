@@ -7,6 +7,17 @@
 
 #include "net/sdn/control_agent.h"
 
+#define DEBUG 0
+#if DEBUG
+#include <stdio.h>
+#define PRINTF(...) printf(__VA_ARGS__)
+#define PRINT6ADDR(addr) PRINTF("[%02x%02x:%02x%02x:%02x%02x:%02x%02x:%02x%02x:%02x%02x:%02x%02x:%02x%02x]", ((uint8_t *)addr)[0], ((uint8_t *)addr)[1], ((uint8_t *)addr)[2], ((uint8_t *)addr)[3], ((uint8_t *)addr)[4], ((uint8_t *)addr)[5], ((uint8_t *)addr)[6], ((uint8_t *)addr)[7], ((uint8_t *)addr)[8], ((uint8_t *)addr)[9], ((uint8_t *)addr)[10], ((uint8_t *)addr)[11], ((uint8_t *)addr)[12], ((uint8_t *)addr)[13], ((uint8_t *)addr)[14], ((uint8_t *)addr)[15])
+#define PRINTLLADDR(addr) PRINTF("[%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x]", ((uint8_t *)addr)[0], ((uint8_t *)addr)[1], ((uint8_t *)addr)[2], ((uint8_t *)addr)[3], ((uint8_t *)addr)[4], ((uint8_t *)addr)[5], ((uint8_t *)addr)[6], ((uint8_t *)addr)[7])
+#else
+#define PRINTF(...)
+#define PRINT6ADDR(addr)
+#define PRINTLLADDR(addr)
+#endif
 
 PROCESS(coap_client_process, "Coap Client");
 static struct ctimer timer_ttl;
@@ -18,8 +29,6 @@ uip_ipaddr_t server_ipaddr;
 #define REMOTE_PORT     UIP_HTONS(COAP_DEFAULT_PORT)
 #define SERVER_NODE(ipaddr)   uip_ip6addr(ipaddr, 0xfd00, 0, 0, 0, 0, 0, 0, 0x0001) 
 
-#define PRINTADDR(addr) printf(" %02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x ", ((uint8_t *)addr)[0], ((uint8_t *)addr)[1], ((uint8_t *)addr)[2], ((uint8_t *)addr)[3], ((uint8_t *)addr)[4], ((uint8_t *)addr)[5], ((uint8_t *)addr)[6], ((uint8_t *)addr)[7])
-#define ADD_BYTE(buf, byte) *buf = byte
 #define URI_QUERY_MAC_ADDR(buffer, addr) sprintf(buffer,"?mac=%02x%02x%02x%02x%02x%02x%02x%02x", ((uint8_t *)addr)[0], ((uint8_t *)addr)[1], ((uint8_t *)addr)[2], ((uint8_t *)addr)[3], ((uint8_t *)addr)[4], ((uint8_t *)addr)[5], ((uint8_t *)addr)[6], ((uint8_t *)addr)[7])
 
 /*
@@ -90,13 +99,11 @@ void sdn_rpl_callback_parent_switch(rpl_parent_t *old, rpl_parent_t *new){
         add_action_to_entry(entry, action);
         remove_entry(entry);  
         
-        /* DEBUG
-        printf(" Removed parent: ");
-        print_ll_addr(&llAddrParent);
-        printf(" Root: ");
-        print_ll_addr(&llAddrRoot);    
-        printf("\n");
-        */
+        PRINTF("Control Agent: removed parent: ");
+        PRINTLLADDR(&llAddrParent);
+        PRINTF(" to root: ");
+        PRINTLLADDR(&llAddrRoot);    
+        PRINTF("\n");
     }
     
     
@@ -125,14 +132,11 @@ void sdn_rpl_callback_parent_switch(rpl_parent_t *old, rpl_parent_t *new){
         add_entry_to_ft(entry);
         
     }
-    /* DEBUG
-    printf(" Mesh addr parent: ");
-    print_ll_addr(&llAddrParent);
-    printf(" Root: ");
-    print_ll_addr(&llAddrRoot);    
-    printf("\n");
-    */
-    //print_flowtable();
+    PRINTF("Control Agent: added parent: ");
+    PRINTLLADDR(&llAddrParent);
+    PRINTF(" to root: ");
+    PRINTLLADDR(&llAddrRoot);    
+    PRINTF("\n");
 }
 
 //Called from the link-stat module when it receive a message from a neighbor
@@ -176,8 +180,6 @@ void sdn_callback_neighbor(const linkaddr_t *addr){
         //It doesn't exist, so add it in to the flow table
         add_entry_to_ft(entry);
     }    
-    
-    //print_flowtable();
 }
 
 static void callback_decrement_ttl(void *ptr){
@@ -198,8 +200,6 @@ static void callback_decrement_ttl(void *ptr){
         else
             entry = entry->next;
     }
-    
-    
 }
 
 
@@ -223,18 +223,20 @@ void handleTableMiss(linkaddr_t* L2_receiver, linkaddr_t* L2_sender, uint8_t* pt
     coap_init_message(&req->req_packet, COAP_TYPE_CON, COAP_POST, 0);
     //Set the target resource 
     coap_set_header_uri_path(&req->req_packet, "Flow_engine");
-    //Set the query parameter: "?type=all_packet&tx_mac=<L2 sender's mac address>&rx_mac=<L2 receiver's mac address>"
+    //Set the query parameter: "?type=all&mac=<sender's mac address>"
     //URI_QUERY_ALL_PACKET(uri_query, L2_sender, L2_receiver);
     URI_QUERY_ALL_PACKET(uri_query, nodeAddr);
     coap_set_header_uri_query(&req->req_packet, uri_query);        
     //Set the type of request needed to the working process in order to select the right callback function
     req->type = TABLE_MISS;
     req->payload_ptr = q;
+    //TODO: insert L2 sender address and L2 receiver address into the payload of the POST request
+    
     //Set payload type and the actual content
     //memcpy(payload, ptr_to_pkt, pkt_dim);
     coap_set_payload(&req->req_packet, queuebuf_dataptr(q), queuebuf_datalen(q));
-    queuebuf_free(req->payload_ptr);
-    start_request();
+    queuebuf_free(req->payload_ptr);        //TODO: this function is supposed to be called after the second process sends the request
+    start_request();                        //But it seems to cause an segmentation fault
 }
 
 uint8_t computeNumOfNeighbours(){
@@ -312,9 +314,9 @@ static void topology_update(void *ptr){
     uint8_t payload_dim = 0;
     req = add_request();
     //DEBUG
-    printf("ADDED FLOW ENTRY: ");
-    print_flowtable();
-    printf("\n");
+    PRINTF("ADDED FLOW ENTRY: ");
+    print_flowtable();          //TODO: remove it when we are sure that the entire system works
+    PRINTF("\n");
     //DEBUG
     if(req != NULL){
         //Set type of message: CON and POST
@@ -329,8 +331,6 @@ static void topology_update(void *ptr){
         //Set payload type and the actual content
         coap_set_header_content_format(&req->req_packet, APPLICATION_CBOR);
         payload_dim = prepare_payload_top_update();   
-        if(payload_dim == 0)
-            return;
         coap_set_payload(&req->req_packet, payload, payload_dim);
         start_request();
     }    
@@ -353,18 +353,28 @@ void control_agent_init(){
 
 void parse_table_miss_response(const uint8_t* chunk, int len){
     const cn_cbor *cb;
+    cn_cbor_errback err;
     cn_cbor* cp;
     if(chunk == NULL || len == 0)
         return;
-    cb = cn_cbor_decode(chunk, len, 0);
-    if(cb == NULL)
+    cb = cn_cbor_decode(chunk, len, &err);
+    if(cb == NULL){
+        PRINTF("Control Agent: parsing Cbor payload has failed:");
+        PRINTF(" Err %u pos %i\n", err.err, err.pos);
         return;
+    }
     if(cb->type == CN_CBOR_ARRAY){
         for (cp = cb->first_child; cp; cp = cp->next) {
-            install_flow_entry_from_cbor(cp);
+            if(install_flow_entry_from_cbor(cp) == 0){
+                PRINTF("Control Agent: inserting new flow entries has failed\n");
+                break;
+            }
         }          
     }
-    cn_cbor_free(cp);
+    else{
+        PRINTF("Control Agent: wrong structure of Cbor response\n");
+    }
+    cn_cbor_free(cb);
 }
 
 
@@ -377,12 +387,12 @@ void client_table_miss_handler(void *response){
     len = coap_get_payload(response, &chunk);
     if(len == 0)
         return;
-    printf("Table miss: ");
+    PRINTF("Table miss: ");
     for (i = 0; i < len; i++)
     {
-      printf("%02x", chunk[i]);
+      PRINTF("%02x", chunk[i]);
     }
-    printf("\n");
+    PRINTF("\n");
     parse_table_miss_response(chunk, len);
 }
 
@@ -393,7 +403,7 @@ void client_topology_update_handler(void *response){
   int len = coap_get_payload(response, &chunk);
   if(len == 0)
       return;
-  printf("Topology update: %.*s", len, (char *)chunk);
+  PRINTF("Topology update: %.*s", len, (char *)chunk);
 }
 
 PROCESS_THREAD(coap_client_process, ev, data){
@@ -406,17 +416,17 @@ PROCESS_THREAD(coap_client_process, ev, data){
         req = get_next_request();
         if(req != NULL){
             if(req->type == TABLE_MISS){
-                printf("TABLE MISS\n");
+                PRINTF("TABLE MISS\n");
                 COAP_BLOCKING_REQUEST(&server_ipaddr, REMOTE_PORT, &req->req_packet, client_table_miss_handler);
                 /*
                 if(req->payload_ptr == NULL)
-                    printf("NULL\n");                    
+                    PRINTF("NULL\n");                    
                 else
                     queuebuf_free(req->payload_ptr);
                 */
             }
             else if(req->type == TOPOLOGY_UPDATE){
-                printf("TOPOLOGY UPDATE\n");
+                PRINTF("TOPOLOGY UPDATE\n");
                 COAP_BLOCKING_REQUEST(&server_ipaddr, REMOTE_PORT, &req->req_packet, client_topology_update_handler);
             }
         
