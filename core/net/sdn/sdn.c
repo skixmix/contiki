@@ -53,8 +53,9 @@ sdn_init(void)
     memset(ipAddrList, 0, sizeof(uip_ipaddr_t) * MAX_NUM_IP_ADDRS);
     memset(meshAddrList, 0, sizeof(linkaddr_t) * MAX_NUM_MESH_ADDRS);
     rpl_config = RPL_BYPASS;
-    nodeMAC = &linkaddr_node_addr;
-    linkaddr_copy(&meshAddrList[0], nodeMAC);     
+    nodeMAC = &linkaddr_node_addr;              //Useless with the native code, since the real MAC addres is being taken few seconds later the stack initialization
+    linkaddr_copy(&meshAddrList[0], nodeMAC);   //Useless with the native code    
+    PRINTF("SDN layer started");
 }
 
 int isRPLMulticast(uip_ipaddr_t* ipAddr){
@@ -116,11 +117,12 @@ input(void)
     uint8_t* ptr = packetbuf_dataptr();
     sent_callback == NULL;
     ptr_copy = NULL;
+    linkaddr_copy(&meshAddrList[0], &linkaddr_node_addr);       //Because of the native code takes few seconds to set the MAC address from the slip-radio program which runs onto the real node 
     /*-------------------------------DEBUG--------------------------------*/
     PRINTF("SDN: Packet received from: ");
     source = packetbuf_addr(PACKETBUF_ADDR_SENDER);
     PRINTLLADDR(source);
-    
+    PRINTF("\n");
     /*------------------------------Logic------------------------------*/
     //Update link statistics
     link_stats_input_callback(packetbuf_addr(PACKETBUF_ADDR_SENDER));
@@ -268,11 +270,11 @@ send(mac_callback_t sent, void *ptr)
     sent_callback = sent;
     ptr_copy = ptr;
     //DEBUG
+    dest = packetbuf_addr(PACKETBUF_ADDR_RECEIVER);
+    PRINTF("SDN: Packet is being sent to: ");
+    PRINTLLADDR(dest);
+    PRINTF("\n");
     if(pktHasMeshHeader(ptr_to_pkt)){
-        dest = packetbuf_addr(PACKETBUF_ADDR_RECEIVER);
-        PRINTF("SDN: Packet is being sent to: ");
-        PRINTLLADDR(dest);
-        PRINTF("\n");
         parseMeshHeader(ptr_to_pkt, &hopLimit, &finalAddr, &finalAddrDim, &origAddr, &origAddrDim);
         PRINTF("Mesh: Hop Limit: %u", hopLimit);
         PRINTF(" Dim = %u Final Address: ", finalAddrDim);
