@@ -46,7 +46,9 @@ netstack_init(void)
   NETSTACK_RDC.init();
   NETSTACK_LLSEC.init();
   NETSTACK_MAC.init();
+#if NETSTACK_CONF_SDN == 1
   NETSTACK_INTERCEPTOR.init();
+#endif
   NETSTACK_NETWORK.init();
 }
 /*---------------------------------------------------------------------------*/

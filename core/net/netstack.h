@@ -51,6 +51,7 @@
 #endif /* NETSTACK_CONF_NETWORK */
 #endif /* NETSTACK_NETWORK */
 
+#if NETSTACK_CONF_SDN == 1
 #ifndef NETSTACK_INTERCEPTOR
 #ifdef NETSTACK_CONF_INTERCEPTOR
 #define NETSTACK_INTERCEPTOR NETSTACK_CONF_INTERCEPTOR
@@ -58,6 +59,7 @@
 #define NETSTACK_INTERCEPTOR sdn_driver
 #endif /* NETSTACK_CONF_INTERCEPTOR */
 #endif /* NETSTACK_INTERCEPTOR */
+#endif /* NETSTACK_CONF_SDN */
 
 #ifndef NETSTACK_LLSEC
 #ifdef NETSTACK_CONF_LLSEC
@@ -134,7 +136,9 @@ struct network_driver {
 };
 
 extern const struct network_driver NETSTACK_NETWORK;
+#if NETSTACK_CONF_SDN == 1
 extern const struct interceptor_driver NETSTACK_INTERCEPTOR;
+#endif
 extern const struct llsec_driver   NETSTACK_LLSEC;
 extern const struct rdc_driver     NETSTACK_RDC;
 extern const struct mac_driver     NETSTACK_MAC;
