@@ -301,6 +301,7 @@ uint8_t forward_action(action_t* action){
     PRINTF("\n");    
     
     //Set the next hop mac address
+    packetbuf_set_addr(PACKETBUF_ADDR_SENDER, &linkaddr_node_addr);
     packetbuf_set_addr(PACKETBUF_ADDR_RECEIVER, action->value.bytes);
     //Pass the control to the SDN module
     forward();
@@ -460,7 +461,7 @@ int matchPacket(){
             break;
     }
     
-    if(entry == NULL){   //This means that the entire table has been looked up
+    if(entry == NULL && continue_flag == 0){   //This means that the entire table has been looked up
         PRINTF("TABLE MISS!\n");
         handleTableMiss(L2_receiver, L2_sender, ptr_to_packet, packetbuf_totlen());    //without finding any right entry for this packet
     }
