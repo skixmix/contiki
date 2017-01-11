@@ -570,7 +570,7 @@ uint8_t remove_entry(entry_t* entry_to_match){
 }
 
 
-void install_flow_entry_from_cbor(cn_cbor* flowEntry){
+uint8_t install_flow_entry_from_cbor(cn_cbor* flowEntry){
     uint16_t priority, ttl;
     cn_cbor *support, *child, *inner;
     rule_t* rule;
@@ -582,7 +582,7 @@ void install_flow_entry_from_cbor(cn_cbor* flowEntry){
     action_type_t actionType;
     uint8_t* value;
     if(flowEntry == NULL)
-        return;
+        return 0;
     if(flowEntry->type == CN_CBOR_ARRAY){
         support = flowEntry->first_child;
         priority = (uint16_t)support->v.uint;
@@ -591,7 +591,7 @@ void install_flow_entry_from_cbor(cn_cbor* flowEntry){
         //Create the flow entry
         entry = create_entry(priority);
         if(entry == NULL)
-            return;
+            return 0;
         entry->stats.ttl = ttl;
         support = support->next;
         if(support->type == CN_CBOR_ARRAY){          //Rules
@@ -612,6 +612,10 @@ void install_flow_entry_from_cbor(cn_cbor* flowEntry){
                 add_rule_to_entry(entry, rule);
             }  
         }
+        else{
+            deallocate_entry(entry);
+            return 0;
+        }
         support = support->next;
         if(support->type == CN_CBOR_ARRAY){          //Actions
             for (child = support->first_child; child != NULL; child = child->next) {
@@ -626,24 +630,28 @@ void install_flow_entry_from_cbor(cn_cbor* flowEntry){
                     size = (uint8_t)inner->v.uint;
                     inner = inner->next;
                     value = (uint8_t*)inner->v.str;
-                    action= create_action(actionType, field, offset, size, value);
+                    action = create_action(actionType, field, offset, size, value);
                 }
                 add_action_to_entry(entry, action);
             }  
         }
+        else{
+            deallocate_entry(entry);
+            return 0;
+        }
     }
-    add_entry_to_ft(entry);
+    if(add_entry_to_ft(entry) != 1){
+        deallocate_entry(entry);
+        return 0;
+    }
+    else
+        return 1;
 }
 
 void flowtable_test(){
     uint8_t addr_tunslip[8]  = {0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01};
     uint8_t addr_1[8]  = {0x00, 0x01, 0x00, 0x01, 0x00, 0x01, 0x00, 0x01};
-    uint8_t addr_2[8]  = {0x00, 0x02, 0x00, 0x02, 0x00, 0x02, 0x00, 0x02};
-    uint8_t addr_3[8]  = {0x00, 0x03, 0x00, 0x03, 0x00, 0x03, 0x00, 0x03};
-    uint8_t addr_4[8]  = {0x00, 0x04, 0x00, 0x04, 0x00, 0x04, 0x00, 0x04};
-    uint8_t addr_5[8]  = {0xc1, 0x0c, 0x00, 0x00, 0x00, 0x00, 0x00, 0x05};
-    //uint8_t addr_6[8]  = {0xc1, 0x0c, 0x00, 0x00, 0x00, 0x00, 0x00, 0x06};
-    //uint8_t value = 3;
+    //uint8_t addr_1[8]  = {0x00, 0x12, 0x74, 0x00, 0x16, 0xc0, 0x77, 0xed};
     rule_t* rule;
     action_t* action;
     entry_t* entry;

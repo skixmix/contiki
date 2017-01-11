@@ -18,13 +18,13 @@
 
 /*-------------------------Constants definition-------------------------------*/
 
-#define MAX_NUM_ENTRIES         15
-#define MAX_NUM_RULES           15
-#define MAX_NUM_ACTIONS         15
-#define NUM_BYTES_2_BLOCKS      4
-#define NUM_BYTES_4_BLOCKS      4
-#define NUM_BYTES_8_BLOCKS      20
-#define NUM_BYTES_16_BLOCKS     2
+#define MAX_NUM_ENTRIES         20
+#define MAX_NUM_RULES           20
+#define MAX_NUM_ACTIONS         20
+#define NUM_BYTES_2_BLOCKS      0
+#define NUM_BYTES_4_BLOCKS      0
+#define NUM_BYTES_8_BLOCKS      30
+#define NUM_BYTES_16_BLOCKS     0
 
 /*---------------------Flow Table data structures-----------------------------*/
 
@@ -145,6 +145,6 @@ entry_t* find_entry(entry_t* entry_to_match);
 uint8_t remove_entry(entry_t* entry_to_match);
 void deallocate_entry(entry_t* entry);
 void flowtable_test();
-void install_flow_entry_from_cbor(cn_cbor* cp);
+uint8_t install_flow_entry_from_cbor(cn_cbor* cp);
 #endif	/* FLOWTABLE_H */
 
