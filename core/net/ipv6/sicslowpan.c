@@ -350,7 +350,7 @@ add_fragment(uint16_t tag, uint16_t frag_size, uint8_t offset)
   int i;
   int len;
   int8_t found = -1;
-  linkaddr_t* sender;
+  const linkaddr_t* sender;
 #if NETSTACK_CONF_SDN == 1  
   if(mesh_src != NULL)
       sender = mesh_src;
@@ -837,6 +837,7 @@ int copyDestIpAddress(uip_ipaddr_t* destAddr){
     if(destAddr == NULL)
         return -1;
     memcpy(destAddr, &UIP_IP_BUF->destipaddr, sizeof(uip_ipaddr_t));
+    return 1;
 }
 
 int pktHasMeshHeader(uint8_t* ptr_to_packet){
@@ -1291,11 +1292,10 @@ uncompress_hdr_iphc(uint8_t *buf, uint16_t ip_len)
   
   //DEBUG
   printf("Mesh source: ");
-  print_ll_addr(mesh_src);
+  print_ll_addr((uint8_t*)mesh_src);
   printf("15.4 source: ");
-  print_ll_addr(packetbuf_addr(PACKETBUF_ADDR_SENDER));
-  printf("\n");
-  
+  print_ll_addr((uint8_t*)packetbuf_addr(PACKETBUF_ADDR_SENDER));
+  printf("\n");  
   //DEBUG
   
   /* context based compression */
