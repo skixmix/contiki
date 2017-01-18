@@ -26,11 +26,11 @@ MEMB(bytes4_memb, bytes4_t, NUM_BYTES_4_BLOCKS);
 MEMB(bytes8_memb, bytes8_t, NUM_BYTES_8_BLOCKS);
 MEMB(bytes16_memb, bytes16_t, NUM_BYTES_16_BLOCKS);
 
-
+/*
 uint8_t clean_up_oldest_entry(){
     //TODO: find the oldest flow table entry and clean up its space
 }
-
+*/
 void flowtable_init(){
     list_init(flowtable);
     memb_init(&entries_memb);
@@ -170,7 +170,7 @@ uint8_t* create_value_field(uint8_t size, uint8_t* value){
     }  
     memcpy(bytes, value, dim);
     
-    
+    return bytes;
 }
 
 action_t* create_action(action_type_t type, field_t field, uint8_t offset, uint8_t size, uint8_t* value){
@@ -652,6 +652,7 @@ void flowtable_test(){
     uint8_t addr_tunslip[8]  = {0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01};
     uint8_t addr_1[8]  = {0x00, 0x01, 0x00, 0x01, 0x00, 0x01, 0x00, 0x01};
     //uint8_t addr_1[8]  = {0x00, 0x12, 0x74, 0x00, 0x16, 0xc0, 0x77, 0xed};
+    //uint8_t addr_1[8]  = {0x00, 0x12, 0x74, 0x00, 0x10, 0x20, 0x29, 0x1a};
     rule_t* rule;
     action_t* action;
     entry_t* entry;
@@ -705,98 +706,6 @@ void flowtable_test(){
         add_entry_to_ft(entry);
         
     }
-    
-    /*
-    if(memcmp(&linkaddr_node_addr, addr_2, 8) == 0){
-        entry = create_entry(1);
-        rule = create_rule(MH_DST_ADDR, 0, 64, EQUAL, addr_1);
-        //rule = create_rule(MH_DST_ADDR, 54, 10, EQUAL, addr_1 + 6);  //Last 10 bits of the 64-bit long MAC address
-        //rule = create_rule(MH_DST_ADDR, 60, 4, EQUAL, addr_1 + 7);     //Last 4 bits of the 64-bit long MAC address
-        add_rule_to_entry(entry, rule); 
-        rule = create_rule(LINK_SRC_ADDR, 0, 64, EQUAL, addr_5);
-        add_rule_to_entry(entry, rule);  
-        action= create_action(FORWARD, NO_FIELD, 0, 64, addr_3);        
-        add_action_to_entry(entry, action);
-        action= create_action(CONTINUE, NO_FIELD, 0, 0, NULL);        
-        add_action_to_entry(entry, action);
-        add_entry_to_ft(entry);
-        entry = create_entry(2);
-        rule = create_rule(MH_DST_ADDR, 0, 64, EQUAL, addr_1);
-        add_rule_to_entry(entry, rule); 
-        rule = create_rule(LINK_SRC_ADDR, 0, 64, EQUAL, addr_6);
-        add_rule_to_entry(entry, rule);  
-        action= create_action(FORWARD, NO_FIELD, 0, 64, addr_4);        
-        add_action_to_entry(entry, action);
-        add_entry_to_ft(entry);
-    }
-    */
-    /*
-    if(memcmp(&linkaddr_node_addr, addr_3, 8) == 0){
-        entry = create_entry(1);
-        rule = create_rule(MH_DST_ADDR, 0, 64, EQUAL, addr_1);
-        action= create_action(FORWARD, NO_FIELD, 0, 64, addr_4);
-        add_rule_to_entry(entry, rule);    
-        add_action_to_entry(entry, action);
-        add_entry_to_ft(entry);
-    }
-    */
-    /*
-    if(memcmp(&linkaddr_node_addr, addr_4, 8) == 0){
-        entry = create_entry(1);
-        rule = create_rule(MH_DST_ADDR, 0, 64, EQUAL, addr_3);
-        action= create_action(FORWARD, NO_FIELD, 0, 64, addr_2);
-        add_rule_to_entry(entry, rule);    
-        add_action_to_entry(entry, action);
-        add_entry_to_ft(entry);
-    }
-    */
-    /*
-    if(memcmp(&linkaddr_node_addr, addr_5, 8) == 0){
-        entry = create_entry(1);
-        rule = create_rule(MH_DST_ADDR, 0, 64, EQUAL, addr_1);
-        action= create_action(FORWARD, NO_FIELD, 0, 64, addr_2);
-        add_rule_to_entry(entry, rule);    
-        add_action_to_entry(entry, action);
-        add_entry_to_ft(entry);
-    }
-    */
-    /*
-    if(memcmp(&linkaddr_node_addr, addr_6, 8) == 0){
-        entry = create_entry(1);
-        rule = create_rule(MH_DST_ADDR, 0, 64, EQUAL, addr_1);
-        action= create_action(FORWARD, NO_FIELD, 0, 64, addr_2);
-        add_rule_to_entry(entry, rule);    
-        add_action_to_entry(entry, action);
-        add_entry_to_ft(entry);
-    }    
-    */
-    /*
-    if(memcmp(&linkaddr_node_addr, addr_6, 8) == 0){
-        entry = create_entry(1);
-        rule = create_rule(MH_DST_ADDR, 54, 10, EQUAL, addr_1 + 6);
-        add_rule_to_entry(entry, rule);   
-        action= create_action(MODIFY, NODE_STATE, 45, 2, &value);         
-        add_action_to_entry(entry, action);
-        entry->stats.ttl=20;
-        add_entry_to_ft(entry);
-        
-        entry = create_entry(2);
-        rule = create_rule(NODE_STATE, 45, 2, EQUAL, &value);
-        add_rule_to_entry(entry, rule);   
-        action= create_action(MODIFY, NODE_STATE, 0, 64, addr_3);         
-        add_action_to_entry(entry, action);
-        entry->stats.ttl=20;
-        add_entry_to_ft(entry);
-        
-        entry = create_entry(3);
-        rule = create_rule(NODE_STATE, 0, 64, EQUAL, addr_3);
-        add_rule_to_entry(entry, rule);   
-        action= create_action(MODIFY, NODE_STATE, 64, 64, addr_4);         
-        add_action_to_entry(entry, action);
-        entry->stats.ttl=20;
-        add_entry_to_ft(entry);
-    }
-    */
     //print_flowtable();
 }
 
