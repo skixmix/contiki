@@ -12,6 +12,8 @@
 #include "net/ip/uip-debug.h"
 #include "net/ipv6/sicslowpan.h"
 #include "net/linkaddr.h"
+#include "net/sdn/datapath.h"
+#include "net/link-stats.h"
 
 
 
@@ -28,8 +30,8 @@
 #endif
 
 
-#define MAX_NUM_MESH_ADDRS 5
-#define MAX_NUM_IP_ADDRS 5
+#define MAX_NUM_MESH_ADDRS 1
+#define MAX_NUM_IP_ADDRS 1
 
 
 
@@ -316,6 +318,13 @@ send(mac_callback_t sent, void *ptr)
 }
 
 int forward(){
+    //DEBUG
+    linkaddr_t* dest;
+    dest = packetbuf_addr(PACKETBUF_ADDR_RECEIVER);
+    PRINTF("SDN: Packet is being sent to: ");
+    PRINTLLADDR(dest);
+    PRINTF("\n");
+
     NETSTACK_LLSEC.send(sent_callback, ptr_copy);
     //NETSTACK_MAC.send(NULL,NULL);
     return 1;
