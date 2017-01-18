@@ -17,7 +17,7 @@
 #include "memb.h"
 
 #ifndef CBOR_MAX_ELEM
-# define CBOR_MAX_ELEM 64
+#define CBOR_MAX_ELEM 32
 #endif
 
 MEMB(cbor_pool, cn_cbor, CBOR_MAX_ELEM);
