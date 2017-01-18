@@ -114,7 +114,9 @@ print_debug(const char *fmt, ...)
   va_list ap;
 
   va_start(ap, fmt);
+#ifndef TESTBED
   printf("%d.%d.%d.%d: ", uip_ipaddr_to_quad(&uip_hostaddr));
+#endif
   vprintf(fmt, ap);
   va_end(ap);
   return;

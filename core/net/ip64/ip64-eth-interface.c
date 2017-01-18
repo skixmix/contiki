@@ -59,14 +59,18 @@ ip64_eth_interface_input(uint8_t *packet, uint16_t len)
     }
   } else if(ethhdr->type == UIP_HTONS(IP64_ETH_TYPE_IP) &&
 	    len > sizeof(struct ip64_eth_hdr)) {
+#ifndef TESTBED
     printf("-------------->\n");
+#endif
     uip_len = ip64_4to6(&packet[sizeof(struct ip64_eth_hdr)],
 			len - sizeof(struct ip64_eth_hdr),
 			&uip_buf[UIP_LLH_LEN]);
     if(uip_len > 0) {
+#ifndef TESTBED
       printf("ip64_interface_process: converted %d bytes\n", uip_len);
 
       printf("ip64-interface: input source ");
+#endif
       PRINT6ADDR(&UIP_IP_BUF->srcipaddr);
       PRINTF(" destination ");
       PRINT6ADDR(&UIP_IP_BUF->destipaddr);
@@ -94,15 +98,19 @@ output(void)
   PRINTF(" destination ");
   PRINT6ADDR(&UIP_IP_BUF->destipaddr);
   PRINTF("\n");
-
+#ifndef TESTBED
   printf("<--------------\n");
+#endif
   len = ip64_6to4(&uip_buf[UIP_LLH_LEN], uip_len,
 		  &ip64_packet_buffer[sizeof(struct ip64_eth_hdr)]);
-
+#ifndef TESTBED
   printf("ip64-interface: output len %d\n", len);
+#endif
   if(len > 0) {
     if(ip64_arp_check_cache(&ip64_packet_buffer[sizeof(struct ip64_eth_hdr)])) {
+#ifndef TESTBED
       printf("Create header\n");
+#endif
       ret = ip64_arp_create_ethhdr(ip64_packet_buffer,
 				   &ip64_packet_buffer[sizeof(struct ip64_eth_hdr)]);
       if(ret > 0) {
@@ -110,7 +118,9 @@ output(void)
 	IP64_ETH_DRIVER.output(ip64_packet_buffer, len);
       }
     } else {
+#ifndef TESTBED
       printf("Create request\n");
+#endif
       len = ip64_arp_create_arp_request(ip64_packet_buffer,
 					&ip64_packet_buffer[sizeof(struct ip64_eth_hdr)]);
       return IP64_ETH_DRIVER.output(ip64_packet_buffer, len);
