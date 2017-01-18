@@ -98,7 +98,7 @@ void sdn_rpl_callback_parent_switch(rpl_parent_t *old, rpl_parent_t *new){
         add_rule_to_entry(entry, rule);
         add_action_to_entry(entry, action);
         remove_entry(entry);  
-        
+        deallocate_entry(entry);
         PRINTF("Control Agent: removed parent: ");
         PRINTLLADDR(&llAddrParent);
         PRINTF(" to root: ");
@@ -169,7 +169,7 @@ void sdn_callback_neighbor(const linkaddr_t *addr){
     //Check if this neighbor already exits into the flow table
     app = find_entry(entry);
     if(app != NULL){
-        //We mustn't confuse with the rule installed by RPL, and it may happen if the root is our neighbour
+        //We can't confuse with the rule installed by RPL, and it may happen if the root is our neighbour
         if(app->stats.ttl != 0){
             //It exists, so just update the ttl field
             app->stats.ttl = 60*10;      // 10 minutes
@@ -229,13 +229,12 @@ void handleTableMiss(linkaddr_t* L2_receiver, linkaddr_t* L2_sender, uint8_t* pt
     coap_set_header_uri_query(&req->req_packet, uri_query);        
     //Set the type of request needed to the working process in order to select the right callback function
     req->type = TABLE_MISS;
-    req->payload_ptr = q;
     //TODO: insert L2 sender address and L2 receiver address into the payload of the POST request
     
     //Set payload type and the actual content
     //memcpy(payload, ptr_to_pkt, pkt_dim);
     coap_set_payload(&req->req_packet, queuebuf_dataptr(q), queuebuf_datalen(q));
-    queuebuf_free(req->payload_ptr);        //TODO: this function is supposed to be called after the second process sends the request
+    queuebuf_free(q);           //TODO: this function is supposed to be called after the second process sends the request
     start_request();                        //But it seems to cause an segmentation fault
 }
 
@@ -418,15 +417,9 @@ PROCESS_THREAD(coap_client_process, ev, data){
             if(req->type == TABLE_MISS){
                 PRINTF("TABLE MISS\n");
                 COAP_BLOCKING_REQUEST(&server_ipaddr, REMOTE_PORT, &req->req_packet, client_table_miss_handler);
-                /*
-                if(req->payload_ptr == NULL)
-                    PRINTF("NULL\n");                    
-                else
-                    queuebuf_free(req->payload_ptr);
-                */
             }
             else if(req->type == TOPOLOGY_UPDATE){
-                PRINTF("TOPOLOGY UPDATE\n");
+                printf("TOPOLOGY UPDATE\n");
                 COAP_BLOCKING_REQUEST(&server_ipaddr, REMOTE_PORT, &req->req_packet, client_topology_update_handler);
             }
         
