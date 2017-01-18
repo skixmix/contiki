@@ -514,7 +514,8 @@ const struct rest_implementation coap_rest_implementation = {
     APPLICATION_FASTINFOSET,
     APPLICATION_SOAP_FASTINFOSET,
     APPLICATION_JSON,
-    APPLICATION_X_OBIX_BINARY
+    APPLICATION_X_OBIX_BINARY,
+    APPLICATION_CBOR
   }
 };
 /*---------------------------------------------------------------------------*/

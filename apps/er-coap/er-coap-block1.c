@@ -42,6 +42,10 @@
 #include "er-coap.h"
 #include "er-coap-block1.h"
 
+#ifdef COAP_BLOCK
+#if COAP_BLOCK == 1
+#endif
+
 #define DEBUG 0
 #if DEBUG
 #define PRINTF(...) printf(__VA_ARGS__)
@@ -117,3 +121,7 @@ coap_block1_handler(void *request, void *response, uint8_t *target, size_t *len,
 
   return 0;
 }
+
+#ifdef COAP_BLOCK
+#endif
+#endif

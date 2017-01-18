@@ -45,6 +45,12 @@
 
 #define COAP_OBSERVER_URL_LEN 20
 
+
+#ifdef COAP_OBSERVING
+#if COAP_OBSERVING == 1
+#endif
+
+
 typedef struct coap_observable {
   uint32_t observe_clock;
   struct stimer orphan_timer;
@@ -84,5 +90,9 @@ void coap_notify_observers_sub(resource_t *resource, const char *subpath);
 
 void coap_observe_handler(resource_t *resource, void *request,
                           void *response);
+
+#ifdef COAP_OBSERVING
+#endif /*COAP_OBSERVING*/
+#endif
 
 #endif /* COAP_OBSERVE_H_ */

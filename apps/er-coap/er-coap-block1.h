@@ -39,9 +39,15 @@
 #ifndef COAP_BLOCK1_H_
 #define COAP_BLOCK1_H_
 
+#ifdef COAP_BLOCK
+#if COAP_BLOCK == 1
+#endif
 #include <stddef.h>
 #include <stdint.h>
 
 int coap_block1_handler(void *request, void *response, uint8_t *target, size_t *len, size_t max_len);
 
+#ifdef COAP_BLOCK
+#endif
+#endif
 #endif /* COAP_BLOCK1_H_ */

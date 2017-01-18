@@ -42,6 +42,10 @@
 #include "er-coap-separate.h"
 #include "er-coap-transactions.h"
 
+#ifdef COAP_SEPARATE
+#if COAP_SEPARATE == 1
+#endif
+
 #define DEBUG 0
 #if DEBUG
 #include <stdio.h>
@@ -147,3 +151,6 @@ coap_separate_resume(void *response, coap_separate_t *separate_store,
   }
 }
 /*---------------------------------------------------------------------------*/
+#ifdef COAP_SEPARATE
+#endif
+#endif

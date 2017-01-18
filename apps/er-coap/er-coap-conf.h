@@ -71,4 +71,12 @@
 /* Interval in notifies in which NON notifies are changed to CON notifies to check client. */
 #define COAP_OBSERVE_REFRESH_INTERVAL  20
 
+#ifndef COAP_OBSERVING
+#define COAP_OBSERVING 1
+#endif
+
+#ifndef COAP_SEPARATE
+#define COAP_SEPARATE 1
+#endif
+
 #endif /* ER_COAP_CONF_H_ */

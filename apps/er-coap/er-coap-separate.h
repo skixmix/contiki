@@ -41,6 +41,10 @@
 
 #include "er-coap.h"
 
+#ifdef COAP_SEPARATE
+#if COAP_SEPARATE == 1
+#endif
+
 typedef struct coap_separate {
 
   uip_ipaddr_t addr;
@@ -65,5 +69,9 @@ void coap_separate_reject(void);
 void coap_separate_accept(void *request, coap_separate_t *separate_store);
 void coap_separate_resume(void *response, coap_separate_t *separate_store,
                           uint8_t code);
+
+#ifdef COAP_SEPARATE
+#endif
+#endif
 
 #endif /* COAP_SEPARATE_H_ */

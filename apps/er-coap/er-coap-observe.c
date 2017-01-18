@@ -40,6 +40,10 @@
 #include <string.h>
 #include "er-coap-observe.h"
 
+#ifdef COAP_OBSERVING
+#if COAP_OBSERVING == 1
+#endif
+
 #define DEBUG 0
 #if DEBUG
 #include <stdio.h>
@@ -303,4 +307,9 @@ coap_observe_handler(resource_t *resource, void *request, void *response)
     }
   }
 }
+
+#ifdef COAP_OBSERVING
+#endif /*COAP_OBSERVING*/
+#endif
+
 /*---------------------------------------------------------------------------*/
