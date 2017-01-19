@@ -9,7 +9,7 @@
 #include "flowtable.h"
 
 
-#define DEBUG 1
+#define DEBUG 0
 #if DEBUG && (!SINK || DEBUG_SINK)
 #include <stdio.h>
 #define PRINTF(...) printf(__VA_ARGS__)
@@ -569,8 +569,10 @@ uint8_t remove_entry(entry_t* entry_to_match){
     return 1;
 }
 
-
-uint8_t install_flow_entry_from_cbor(cn_cbor* flowEntry){
+//It returns the pointer to the field "value" of the first rule contained in the installed entry
+//In our scenario this first rule targets the MESH_DST_ADDR.
+//Returning this value allows the Local Control Agent to remove the relative pending request  
+uint8_t* install_flow_entry_from_cbor(cn_cbor* flowEntry){
     uint16_t priority, ttl;
     cn_cbor *support, *child, *inner;
     rule_t* rule;
@@ -582,7 +584,7 @@ uint8_t install_flow_entry_from_cbor(cn_cbor* flowEntry){
     action_type_t actionType;
     uint8_t* value;
     if(flowEntry == NULL)
-        return 0;
+        return NULL;
     if(flowEntry->type == CN_CBOR_ARRAY){
         support = flowEntry->first_child;
         priority = (uint16_t)support->v.uint;
@@ -591,7 +593,7 @@ uint8_t install_flow_entry_from_cbor(cn_cbor* flowEntry){
         //Create the flow entry
         entry = create_entry(priority);
         if(entry == NULL)
-            return 0;
+            return NULL;
         entry->stats.ttl = ttl;
         support = support->next;
         if(support->type == CN_CBOR_ARRAY){          //Rules
@@ -614,7 +616,7 @@ uint8_t install_flow_entry_from_cbor(cn_cbor* flowEntry){
         }
         else{
             deallocate_entry(entry);
-            return 0;
+            return NULL;
         }
         support = support->next;
         if(support->type == CN_CBOR_ARRAY){          //Actions
@@ -637,15 +639,23 @@ uint8_t install_flow_entry_from_cbor(cn_cbor* flowEntry){
         }
         else{
             deallocate_entry(entry);
-            return 0;
+            return NULL;
         }
     }
+    PRINTF("Installed: ");
+    print_entry(entry);
+    PRINTF("\n");
     if(add_entry_to_ft(entry) != 1){
         deallocate_entry(entry);
-        return 0;
+        return NULL;
     }
-    else
-        return 1;
+    else{
+        rule = list_head(entry->rules);
+        if(rule->field == MH_DST_ADDR)
+            return rule->value.bytes;
+        else 
+            return NULL;
+    }
 }
 
 void flowtable_test(){

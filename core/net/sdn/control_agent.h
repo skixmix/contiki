@@ -25,8 +25,8 @@
 //#include "dev/battery-sensor.h"
 
 #define TTL_INTERVAL		(1 * CLOCK_SECOND)
-#define TOP_UPDATE_PERIOD       (60 * CLOCK_SECOND)
-#define MAX_DIM_PAYLOAD         8 + (16 * NBR_TABLE_CONF_MAX_NEIGHBORS)                 
+#define TOP_UPDATE_PERIOD       (30 * CLOCK_SECOND)
+#define MAX_DIM_PAYLOAD         8 + (16 * NBR_TABLE_CONF_MAX_NEIGHBORS)               
 #define MAX_REQUEST             4       //Must be a power of two
 
 typedef enum {
@@ -39,6 +39,12 @@ typedef struct request{
     coap_packet_t req_packet;
     request_type_t type;
 } request_t;
+
+typedef struct pending_request{
+    linkaddr_t mesh_address;
+    struct timer lifetime_timer;
+    uint8_t valid;          //0: not valid, 1: valid
+} pending_request_t;  
 
 void handleTableMiss(linkaddr_t* L2_receiver, linkaddr_t* L2_sender, uint8_t* ptr_to_pkt, uint16_t pkt_dim);
 void sdn_callback_neighbor(const linkaddr_t *addr);

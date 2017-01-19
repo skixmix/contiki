@@ -7,7 +7,7 @@
 
 #include "net/sdn/control_agent.h"
 
-#define DEBUG 0
+#define DEBUG 1
 #if DEBUG
 #include <stdio.h>
 #define PRINTF(...) printf(__VA_ARGS__)
@@ -24,8 +24,10 @@ static struct ctimer timer_ttl;
 static struct ctimer timer_topology;
 static struct ringbufindex requests_ringbuf;
 static request_t requests_array[MAX_REQUEST];
+static pending_request_t pending_array[MAX_REQUEST];
 uip_ipaddr_t server_ipaddr;
 
+#define LOCAL_PORT      UIP_HTONS(COAP_DEFAULT_PORT + 1)
 #define REMOTE_PORT     UIP_HTONS(COAP_DEFAULT_PORT)
 #define SERVER_NODE(ipaddr)   uip_ip6addr(ipaddr, 0xfd00, 0, 0, 0, 0, 0, 0, 0x0001) 
 
@@ -57,8 +59,9 @@ request_t* add_request(void){
 }
 
 request_t* get_next_request(void){
-  int index = ringbufindex_get(&requests_ringbuf);
+  int index = ringbufindex_peek_get(&requests_ringbuf);
   if(index != -1){
+      ringbufindex_get(&requests_ringbuf);
       return &requests_array[index];
   }
   return NULL;
@@ -179,6 +182,9 @@ void sdn_callback_neighbor(const linkaddr_t *addr){
     else{
         //It doesn't exist, so add it in to the flow table
         add_entry_to_ft(entry);
+        PRINTF("Neighbour found: installed ");
+        print_entry(entry);
+        PRINTF("\n");
     }    
 }
 
@@ -202,19 +208,81 @@ static void callback_decrement_ttl(void *ptr){
     }
 }
 
+//It returns -1 if there's no free place, or if the mesh address is already contained
+//Otherwise, when the request was successfully added, it returns the array index
+int add_pending_request(linkaddr_t* mesh_destination){
+    int i, free_slot = -1; 
+    //Clear the exipred request
+    for(i = 0; i < MAX_REQUEST; i++){
+        if(pending_array[i].valid && timer_expired(&pending_array[i].lifetime_timer)){   //Valid and expired -> remove it
+            PRINTF("Request for ");
+            PRINTLLADDR(&pending_array[i].mesh_address);
+            PRINTF(" has expired\n");
+            pending_array[i].valid = 0;
+        }
+    }
+    //Search for the mesh_destination in valid request slot
+    for(i = 0; i < MAX_REQUEST; i++){
+        if(pending_array[i].valid && linkaddr_cmp(mesh_destination, &pending_array[i].mesh_address) != 0){   
+            //A request for mesh_destination address has already been sent
+            PRINTF("There is already a request for ");
+            PRINTLLADDR(&pending_array[i].mesh_address);
+            PRINTF("\n");
+            return -1;
+        }
+        if(!pending_array[i].valid)
+            free_slot = i;
+    }
+    if(free_slot == -1) //No free slot for this request
+        return -1;
+    //At this point it means that there's no a request with mesh_destination address
+    //Thus, add it at the first free slot, set the timer and return the index
+    linkaddr_copy(&pending_array[free_slot].mesh_address, mesh_destination);
+    pending_array[free_slot].valid = 1;
+    timer_set(&pending_array[free_slot].lifetime_timer, CLOCK_SECOND * COAP_MAX_RETRANSMIT * COAP_RESPONSE_TIMEOUT);
+    PRINTF("Set pending req for %u seconds with: ", COAP_MAX_RETRANSMIT * COAP_RESPONSE_TIMEOUT);
+    PRINTLLADDR(&pending_array[free_slot].mesh_address);
+    PRINTF("\n");
+    return free_slot;
+}
+
+void remove_pending_req(linkaddr_t* mesh_destination){
+    int i;
+    for(i = 0; i < MAX_REQUEST; i++){
+        if(pending_array[i].valid && linkaddr_cmp(mesh_destination, &pending_array[i].mesh_address) != 0){   
+            //A response for mesh_destination address has arrived
+            PRINTF("Entry for ");
+            PRINTLLADDR(&pending_array[i].mesh_address);
+            PRINTF(" has arrived, remove it\n");
+            pending_array[i].valid = 0;
+            break;
+        }
+        
+    }
+}
 
 void handleTableMiss(linkaddr_t* L2_receiver, linkaddr_t* L2_sender, uint8_t* ptr_to_pkt, uint16_t pkt_dim){
     request_t* req = NULL;
-    uint8_t payload_dim = 0;
+    int pending_index = 0;
     linkaddr_t* nodeAddr = &linkaddr_node_addr;
+    linkaddr_t mesh_destination;
     struct queuebuf* q;
     if(queuebuf_numfree() == 0)
         return;
     q = queuebuf_new_from_packetbuf();
     if(q == NULL)
         return;
+    if(parseMeshHeader(ptr_to_pkt, NULL, &mesh_destination, NULL, NULL, NULL) > 0){
+        pending_index = add_pending_request(&mesh_destination);
+        if(pending_index == -1){
+            queuebuf_free(q);
+            return;
+        }
+    }
     req = add_request();
     if(req == NULL){
+        if(pending_index != -1)
+            pending_array[pending_index].valid = 0;
         queuebuf_free(q);
         return;
     }
@@ -261,11 +329,14 @@ uint8_t prepare_payload_top_update(){
     //Where there is 0x00 it means that it is a field which will be set later.
     uint8_t header[] = {0x84, 0x00, 0x19, 0x00, 0x00, 0x18, 0x00, 0x00};
     uint8_t neighbour[] = {0x48, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x82, 0x39, 0x00, 0x00, 0x19, 0x00, 0x00};
-    
+    printf("\nPREPARE PAYLOAD\n");
     //Get the number of neighbours, if it is 0 don't send any update to the Controller then
     num_of_neigh = computeNumOfNeighbours();
-    if(num_of_neigh == 0)
+    if(num_of_neigh == 0){
+        //DEBUG
+        printf("\n0 NEIGHBOURS\n");
         return 0;
+    }
     //Set the state information regarding the sending node  
     header[1] = 1;                  //Version of the update structure
     header[3] = 60 << 8;                 //Battery level
@@ -283,7 +354,6 @@ uint8_t prepare_payload_top_update(){
     
     //Scan the neighbours table 
     for(nbr = nbr_table_head(ds6_neighbors); nbr != NULL; nbr = nbr_table_next(ds6_neighbors, nbr)) {
-        num_of_neigh++;
         //Get the neighbour's MAC address
         lladdr = uip_ds6_nbr_get_ll(nbr); 
         //And its stats
@@ -293,15 +363,21 @@ uint8_t prepare_payload_top_update(){
         //Set the neighbour's MAC address into the Cbor structure
         memcpy(neighbour+1, lladdr, 8);
         //Set RSSI and ETX relative to the neighbour node
-        neighbour[11] = rssi << 8;
-        neighbour[12] = rssi & ((1 << 8) - 1);
-        neighbour[14] = etx << 8;
-        neighbour[15] = etx & ((1 << 8) - 1);
+        neighbour[11] = (uint8_t)(rssi << 8);
+        neighbour[12] = (uint8_t)(rssi & ((1 << 8) - 1));
+        neighbour[14] = (uint8_t)(etx << 8);
+        neighbour[15] = (uint8_t)(etx & ((1 << 8) - 1));
         //Copy the Cbor structure into the POST payload
         memcpy(payload+payload_dim, neighbour, sizeof(neighbour));
         payload_dim += sizeof(neighbour);
     }
+    //DEBUG
     
+    int i;
+    printf("\nCBOR: ");
+    for(i = 0; i < MAX_DIM_PAYLOAD; i++)
+        printf("%02x", payload[i]);
+    printf("\n dim = %u\n", payload_dim);
     
     return payload_dim;
     
@@ -338,12 +414,16 @@ static void topology_update(void *ptr){
 
  
 void control_agent_init(){
-    unsigned short delay = random_rand() % 10;
+    int i; 
+    unsigned short delay = random_rand() % 30;
     ctimer_set(&timer_ttl, TTL_INTERVAL, callback_decrement_ttl, NULL);
     ctimer_set(&timer_topology, TOP_UPDATE_PERIOD + delay, topology_update, NULL);
     flowtable_init();
     flowtable_test();
-    
+    //init pending request    
+    for(i = 0; i < MAX_REQUEST; i++){
+        pending_array[i].valid = 0;
+    }
     SERVER_NODE(&server_ipaddr);
     ringbufindex_init(&requests_ringbuf, MAX_REQUEST);
     process_start(&coap_client_process, NULL);
@@ -354,6 +434,7 @@ void parse_table_miss_response(const uint8_t* chunk, int len){
     const cn_cbor *cb;
     cn_cbor_errback err;
     cn_cbor* cp;
+    linkaddr_t* mesh_destination;
     if(chunk == NULL || len == 0)
         return;
     cb = cn_cbor_decode(chunk, len, &err);
@@ -364,9 +445,13 @@ void parse_table_miss_response(const uint8_t* chunk, int len){
     }
     if(cb->type == CN_CBOR_ARRAY){
         for (cp = cb->first_child; cp; cp = cp->next) {
-            if(install_flow_entry_from_cbor(cp) == 0){
+            mesh_destination = (linkaddr_t*)install_flow_entry_from_cbor(cp);
+            if(mesh_destination == NULL){
                 PRINTF("Control Agent: inserting new flow entries has failed\n");
                 break;
+            }
+            else{
+                remove_pending_req(mesh_destination);
             }
         }          
     }
