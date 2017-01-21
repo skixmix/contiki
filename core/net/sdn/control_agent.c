@@ -51,6 +51,7 @@ void start_request(void){
 
 request_t* add_request(void){
   int index = ringbufindex_peek_put(&requests_ringbuf);
+  //printf("ADD = %i\n", index);
   if(index != -1){
       ringbufindex_put(&requests_ringbuf);
       return &requests_array[index];
@@ -60,6 +61,7 @@ request_t* add_request(void){
 
 request_t* get_next_request(void){
   int index = ringbufindex_peek_get(&requests_ringbuf);
+  //printf("GET = %i\n", index);
   if(index != -1){
       ringbufindex_get(&requests_ringbuf);
       return &requests_array[index];
@@ -201,6 +203,9 @@ static void callback_decrement_ttl(void *ptr){
         if(entry->stats.ttl == 0){
             app = entry;
             entry = entry->next;
+            printf("EXPIRED: ");
+            print_entry(app);
+            printf("\n");
             remove_entry(app);
         }
         else
@@ -329,12 +334,11 @@ uint8_t prepare_payload_top_update(){
     //Where there is 0x00 it means that it is a field which will be set later.
     uint8_t header[] = {0x84, 0x00, 0x19, 0x00, 0x00, 0x18, 0x00, 0x00};
     uint8_t neighbour[] = {0x48, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x82, 0x39, 0x00, 0x00, 0x19, 0x00, 0x00};
-    printf("\nPREPARE PAYLOAD\n");
     //Get the number of neighbours, if it is 0 don't send any update to the Controller then
     num_of_neigh = computeNumOfNeighbours();
     if(num_of_neigh == 0){
         //DEBUG
-        printf("\n0 NEIGHBOURS\n");
+        PRINTF("Control agent: 0 NEIGHBOURS\n");
         return 0;
     }
     //Set the state information regarding the sending node  
@@ -372,13 +376,13 @@ uint8_t prepare_payload_top_update(){
         payload_dim += sizeof(neighbour);
     }
     //DEBUG
-    
+    /*
     int i;
     printf("\nCBOR: ");
     for(i = 0; i < MAX_DIM_PAYLOAD; i++)
         printf("%02x", payload[i]);
     printf("\n dim = %u\n", payload_dim);
-    
+    */
     return payload_dim;
     
 }
@@ -406,9 +410,9 @@ static void topology_update(void *ptr){
         //Set payload type and the actual content
         coap_set_header_content_format(&req->req_packet, APPLICATION_CBOR);
         payload_dim = prepare_payload_top_update();   
-        coap_set_payload(&req->req_packet, payload, payload_dim);
-        start_request();
+        coap_set_payload(&req->req_packet, payload, payload_dim);   
     }    
+    start_request();
     ctimer_reset(&timer_topology);
 }
 
@@ -471,12 +475,12 @@ void client_table_miss_handler(void *response){
     len = coap_get_payload(response, &chunk);
     if(len == 0)
         return;
-    PRINTF("Table miss: ");
+    printf("Table miss: ");
     for (i = 0; i < len; i++)
     {
-      PRINTF("%02x", chunk[i]);
+      printf("%02x", chunk[i]);
     }
-    PRINTF("\n");
+    printf("\n");
     parse_table_miss_response(chunk, len);
 }
 
@@ -497,17 +501,19 @@ PROCESS_THREAD(coap_client_process, ev, data){
     coap_init_engine();
     while(1) {
         PROCESS_YIELD_UNTIL(ev == PROCESS_EVENT_POLL);
-        req = get_next_request();
-        if(req != NULL){
-            if(req->type == TABLE_MISS){
-                PRINTF("TABLE MISS\n");
-                COAP_BLOCKING_REQUEST(&server_ipaddr, REMOTE_PORT, &req->req_packet, client_table_miss_handler);
+        while((req = get_next_request()) != NULL){
+            
+            if(req != NULL){
+                if(req->type == TABLE_MISS){
+                    printf("TABLE MISS\n");
+                    COAP_BLOCKING_REQUEST(&server_ipaddr, REMOTE_PORT, &req->req_packet, client_table_miss_handler);
+                }
+                else if(req->type == TOPOLOGY_UPDATE){
+                    PRINTF("TOPOLOGY UPDATE\n");
+                    COAP_BLOCKING_REQUEST(&server_ipaddr, REMOTE_PORT, &req->req_packet, client_topology_update_handler);
+                }
+
             }
-            else if(req->type == TOPOLOGY_UPDATE){
-                printf("TOPOLOGY UPDATE\n");
-                COAP_BLOCKING_REQUEST(&server_ipaddr, REMOTE_PORT, &req->req_packet, client_topology_update_handler);
-            }
-        
         }
     }
     PROCESS_END();
