@@ -187,12 +187,10 @@ set_global_address(void)
  
 #if 1
 /* Mode 1 - 64 bits inline */
-   /*
    uip_ip6addr(&server_ipaddr[0], UIP_DS6_DEFAULT_PREFIX, 0, 0, 0, 0x0207, 7, 7, 7);
    uip_ip6addr(&server_ipaddr[1], UIP_DS6_DEFAULT_PREFIX, 0, 0, 0, 0x0208, 8, 8, 8);
    uip_ip6addr(&server_ipaddr[2], UIP_DS6_DEFAULT_PREFIX, 0, 0, 0, 0x0209, 9, 9, 9);
    uip_ip6addr(&server_ipaddr[3], UIP_DS6_DEFAULT_PREFIX, 0, 0, 0, 0x020a, 0x000a, 0x000a, 0x000a);
-   */
 #elif 0
 /* Mode 2 - 16 bits inline */
   uip_ip6addr(&server_ipaddr, UIP_DS6_DEFAULT_PREFIX, 0, 0, 0, 0, 0x00ff, 0xfe00, 1);
