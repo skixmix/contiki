@@ -45,11 +45,23 @@
 #include "net/link-stats.h"
 #include "net/rpl/rpl.h"
 #include "net/ipv6/uip-nd6.h"
+#if NETSTACK_CONF_SDN == 1
 #include "net/sdn/control_agent.h"
+#endif
 
-#define UIP_CONF_ROUTER 1
+//#define UIP_CONF_ROUTER 1
 
 //ADDED
+
+#define SDN_STATS 1
+#if SDN_STATS
+#include <stdio.h>
+#define PRINT_STAT(...) printf(__VA_ARGS__)
+#define PRINT_STAT_LLADDR(addr) PRINTF("[%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x]", ((uint8_t *)addr)[0], ((uint8_t *)addr)[1], ((uint8_t *)addr)[2], ((uint8_t *)addr)[3], ((uint8_t *)addr)[4], ((uint8_t *)addr)[5], ((uint8_t *)addr)[6], ((uint8_t *)addr)[7])
+#else
+#define PRINT_STAT(...)
+#define PRINT_STAT_LLADDR(addr)
+#endif
 
 /* Only for TMOTE Sky? */
 #include "dev/serial-line.h"
@@ -65,17 +77,17 @@
 #include "net/ip/uip-debug.h"
 
 #ifndef PERIOD
-#define PERIOD 60
+#define PERIOD 30
 #endif
 
 #define START_INTERVAL		(15 * CLOCK_SECOND)
 #define SEND_INTERVAL		(PERIOD * CLOCK_SECOND)
 #define SEND_TIME		(random_rand() % (SEND_INTERVAL))
 #define MAX_PAYLOAD_LEN		30
+#define NUM_OF_RECEIVERS        4
 
 static struct uip_udp_conn *client_conn;
-static uip_ipaddr_t server_ipaddr;
-static struct uip_ds6_notification n;
+static uip_ipaddr_t server_ipaddr[NUM_OF_RECEIVERS];
 
 /*---------------------------------------------------------------------------*/
 PROCESS(udp_client_process, "UDP client process");
@@ -83,17 +95,19 @@ AUTOSTART_PROCESSES(&udp_client_process);
 /*---------------------------------------------------------------------------*/
 static int seq_id;
 static int reply;
+static unsigned int counter;
 
 static void
 tcpip_handler(void)
 {
   char *str;
-
+  int seq_recv;
   if(uip_newdata()) {
     str = uip_appdata;
     str[uip_datalen()] = '\0';
     reply++;
     printf("DATA recv '%s' (s:%d, r:%d)\n", str, seq_id, reply);
+    PRINT_STAT("\nC_R_%s\n", str + 27);
   }
 }
 /*---------------------------------------------------------------------------*/
@@ -101,7 +115,7 @@ static void
 send_packet(void *ptr)
 {
   char buf[MAX_PAYLOAD_LEN];
-
+  int rand_index = (counter % NUM_OF_RECEIVERS);
 #ifdef SERVER_REPLY
   uint8_t num_used = 0;
   uip_ds6_nbr_t *nbr;
@@ -119,11 +133,13 @@ send_packet(void *ptr)
 #endif /* SERVER_REPLY */
 
   seq_id++;
+  counter++;
+  PRINT_STAT("\nC_S_%d->%d\n", seq_id, server_ipaddr[rand_index].u8[sizeof(server_ipaddr[rand_index].u8) - 1]);
   PRINTF("DATA send to %d 'Hello %d'\n",
-         server_ipaddr.u8[sizeof(server_ipaddr.u8) - 1], seq_id);
-  sprintf(buf, "Hello %d from the client", seq_id);
+         server_ipaddr[rand_index].u8[sizeof(server_ipaddr[rand_index].u8) - 1], seq_id);
+  sprintf(buf, "Hello, sequence id = %d", seq_id);
   uip_udp_packet_sendto(client_conn, buf, strlen(buf),
-                        &server_ipaddr, UIP_HTONS(UDP_SERVER_PORT));
+                        &server_ipaddr[rand_index], UIP_HTONS(UDP_SERVER_PORT));
 }
 /*---------------------------------------------------------------------------*/
 static void
@@ -146,24 +162,7 @@ print_local_addresses(void)
     }
   }
 }
-/*----------------ADDED----------------*/
-static void
-route_callback_notify(int event, uip_ipaddr_t *route, uip_ipaddr_t *ipaddr, int numroutes)
-{
-	if(event == UIP_DS6_NOTIFICATION_DEFRT_ADD)
-		printf("Nuova default route per ");
-	else if(event == UIP_DS6_NOTIFICATION_DEFRT_RM)
-		printf("Rimossa default route per ");
-	else if(event == UIP_DS6_NOTIFICATION_ROUTE_ADD)
-		printf("Aggiunta route per ");
-	else
-		printf("Rimossa route per ");
-	PRINT6ADDR(route);
-	printf(" -> ");
-	PRINT6ADDR(ipaddr);
-	printf("\n");
-}
-/*----------------ADDED----------------*/
+
 
 /*---------------------------------------------------------------------------*/
 static void
@@ -186,9 +185,14 @@ set_global_address(void)
  * Note the IPCMV6 checksum verification depends on the correct uncompressed addresses.
  */
  
-#if 0
+#if 1
 /* Mode 1 - 64 bits inline */
-   uip_ip6addr(&server_ipaddr, UIP_DS6_DEFAULT_PREFIX, 0, 0, 0, 0, 0, 0, 1);
+   /*
+   uip_ip6addr(&server_ipaddr[0], UIP_DS6_DEFAULT_PREFIX, 0, 0, 0, 0x0207, 7, 7, 7);
+   uip_ip6addr(&server_ipaddr[1], UIP_DS6_DEFAULT_PREFIX, 0, 0, 0, 0x0208, 8, 8, 8);
+   uip_ip6addr(&server_ipaddr[2], UIP_DS6_DEFAULT_PREFIX, 0, 0, 0, 0x0209, 9, 9, 9);
+   uip_ip6addr(&server_ipaddr[3], UIP_DS6_DEFAULT_PREFIX, 0, 0, 0, 0x020a, 0x000a, 0x000a, 0x000a);
+   */
 #elif 0
 /* Mode 2 - 16 bits inline */
   uip_ip6addr(&server_ipaddr, UIP_DS6_DEFAULT_PREFIX, 0, 0, 0, 0, 0x00ff, 0xfe00, 1);
@@ -220,7 +224,7 @@ PROCESS_THREAD(udp_client_process, ev, data)
 
   print_local_addresses();
   
- 
+  counter = random_rand() % NUM_OF_RECEIVERS;
 
   /* new connection with remote host */
   client_conn = udp_new(NULL, UIP_HTONS(UDP_SERVER_PORT), NULL); 
@@ -245,9 +249,6 @@ PROCESS_THREAD(udp_client_process, ev, data)
   powertrace_sniff(POWERTRACE_ON);
 #endif
 
-  //ADDED
-  uip_ds6_notification_add(&n, route_callback_notify);	
-  //ADDED
 
   etimer_set(&periodic, SEND_INTERVAL);
   while(1) {
@@ -305,38 +306,7 @@ PROCESS_THREAD(udp_client_process, ev, data)
 #endif
 
     }
-    //ADDED
-    uip_ds6_nbr_t *nbr;
-    uip_lladdr_t *lladdr;
-    int freshness;
-    struct link_stats * stats;
-    PRINTF("Neighbours:\n");
-    for(nbr = nbr_table_head(ds6_neighbors); nbr != NULL; nbr = nbr_table_next(ds6_neighbors, nbr)) {
-        lladdr = uip_ds6_nbr_get_ll(nbr);
-	stats = link_stats_from_lladdr(lladdr);
-        freshness = link_stats_is_fresh(stats);
-	PRINTF(" MAC: ");	
-	PRINTLLADDR(lladdr);
-	PRINTF(" IPv6: ");
-	PRINT6ADDR(uip_ds6_nbr_get_ipaddr(nbr));
-	printf(" RSSI= %i ETX= %u Freshness= %i", stats->rssi, stats->etx, freshness);
-        PRINTF("\n");
-    }
-
-    rpl_dag_t *dag = rpl_get_any_dag();
-     uip_ipaddr_t * ip_address_parent = rpl_get_parent_ipaddr(dag->preferred_parent);
-     printf("IP Addr of my parent: ");
-     PRINT6ADDR(ip_address_parent);
-     printf("\n");	
-     printf("DAG ID: ");
-     PRINT6ADDR(&dag->dag_id);
-     printf("\n");
-     printf("Prefix info: ");
-     PRINT6ADDR(&dag->prefix_info.prefix);
-     printf("\n");
-    //printf("\n RPL Neighbors: \n");
-    //rpl_print_neighbor_list();
-    //ADDED	
+    
   }
 
 
