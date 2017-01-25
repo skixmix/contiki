@@ -40,6 +40,9 @@
 #include <string.h>
 #include <ctype.h>
 
+#if NETSTACK_CONF_SDN == 1
+#include "net/sdn/control_agent.h"
+#endif
 //ADDED
 //#include "net/ipv6/uip-nd6.h"
 //#define UIP_CONF_ROUTER 1
@@ -56,6 +59,8 @@
 
 #define UDP_EXAMPLE_ID  190
 
+#define MAX_PAYLOAD_LEN		40
+
 static struct uip_udp_conn *server_conn;
 
 PROCESS(udp_server_process, "UDP server process");
@@ -65,7 +70,7 @@ static void
 tcpip_handler(void)
 {
   char *appdata;
-
+  char buf[MAX_PAYLOAD_LEN];
   if(uip_newdata()) {
     appdata = (char *)uip_appdata;
     appdata[uip_datalen()] = 0;
@@ -76,7 +81,8 @@ tcpip_handler(void)
 #if SERVER_REPLY
     PRINTF("DATA sending reply\n");
     uip_ipaddr_copy(&server_conn->ripaddr, &UIP_IP_BUF->srcipaddr);
-    uip_udp_packet_send(server_conn, "Reply", sizeof("Reply"));
+    sprintf(buf, "Reply %s", appdata);
+    uip_udp_packet_send(server_conn, buf, strlen(buf));
     uip_create_unspecified(&server_conn->ripaddr);
 #endif
   }
@@ -139,7 +145,7 @@ PROCESS_THREAD(udp_server_process, ev, data)
   uip_ip6addr(&ipaddr, UIP_DS6_DEFAULT_PREFIX, 0, 0, 0, 0, 0, 0, 0);
   uip_ds6_set_addr_iid(&ipaddr, &uip_lladdr);
 #endif
-
+/*
   uip_ds6_addr_add(&ipaddr, 0, ADDR_MANUAL);
   root_if = uip_ds6_addr_lookup(&ipaddr);
   if(root_if != NULL) {
@@ -151,13 +157,16 @@ PROCESS_THREAD(udp_server_process, ev, data)
   } else {
     PRINTF("failed to create a new RPL DAG\n");
   }
+*/
 #endif /* UIP_CONF_ROUTER */
-  
+#if NETSTACK_CONF_SDN == 1
+  control_agent_init();
+#endif
   print_local_addresses();
 
   /* The data sink runs with a 100% duty cycle in order to ensure high 
      packet reception rates. */
-  NETSTACK_MAC.off(1);
+  //NETSTACK_MAC.off(1);
 
   server_conn = udp_new(NULL, UIP_HTONS(UDP_CLIENT_PORT), NULL);
   if(server_conn == NULL) {
@@ -177,7 +186,7 @@ PROCESS_THREAD(udp_server_process, ev, data)
       tcpip_handler();
     } else if (ev == sensors_event && data == &button_sensor) {
       PRINTF("Initiaing global repair\n");
-      rpl_repair_root(RPL_DEFAULT_INSTANCE);
+      //rpl_repair_root(RPL_DEFAULT_INSTANCE);
     }
   }
 
