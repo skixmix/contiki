@@ -7,7 +7,17 @@
 
 #include "net/sdn/control_agent.h"
 
-#define DEBUG 1
+#define SDN_STATS 1
+#if SDN_STATS
+#include <stdio.h>
+#define PRINT_STAT(...) printf(__VA_ARGS__)
+#define PRINT_STAT_LLADDR(addr) printf("%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x", ((uint8_t *)addr)[0], ((uint8_t *)addr)[1], ((uint8_t *)addr)[2], ((uint8_t *)addr)[3], ((uint8_t *)addr)[4], ((uint8_t *)addr)[5], ((uint8_t *)addr)[6], ((uint8_t *)addr)[7])
+#else
+#define PRINT_STAT(...)
+#define PRINT_STAT_LLADDR(addr)
+#endif
+
+#define DEBUG 0
 #if DEBUG
 #include <stdio.h>
 #define PRINTF(...) printf(__VA_ARGS__)
@@ -51,7 +61,7 @@ void start_request(void){
 
 request_t* add_request(void){
   int index = ringbufindex_peek_put(&requests_ringbuf);
-  //printf("ADD = %i\n", index);
+  //printf("RINGBUF_ADD = %i\n", index);
   if(index != -1){
       ringbufindex_put(&requests_ringbuf);
       return &requests_array[index];
@@ -59,16 +69,25 @@ request_t* add_request(void){
   return NULL;
 }
 
-request_t* get_next_request(void){
+request_t* get_ref_to_next_request(void){
   int index = ringbufindex_peek_get(&requests_ringbuf);
-  //printf("GET = %i\n", index);
+  //printf("RINGBUF_GET = %i\n", index);
   if(index != -1){
-      ringbufindex_get(&requests_ringbuf);
+      //ringbufindex_get(&requests_ringbuf);
       return &requests_array[index];
   }
   return NULL;
 }
 
+request_t* advance_ring_buf(){
+    int index = ringbufindex_get(&requests_ringbuf);
+    //printf("RINGBUF_ADV = %i\n", index);
+    if(index != -1){
+      //ringbufindex_get(&requests_ringbuf);
+      return &requests_array[index];
+    }
+    return NULL;
+}
 
 //Called from the RPL module when it chooses a (new) parent
 void sdn_rpl_callback_parent_switch(rpl_parent_t *old, rpl_parent_t *new){
@@ -109,6 +128,10 @@ void sdn_rpl_callback_parent_switch(rpl_parent_t *old, rpl_parent_t *new){
         PRINTF(" to root: ");
         PRINTLLADDR(&llAddrRoot);    
         PRINTF("\n");
+        
+        PRINT_STAT("\nCTR_RPL_REM-");
+        PRINT_STAT_LLADDR(&llAddrParent);
+        PRINT_STAT("\n");
     }
     
     
@@ -142,6 +165,10 @@ void sdn_rpl_callback_parent_switch(rpl_parent_t *old, rpl_parent_t *new){
     PRINTF(" to root: ");
     PRINTLLADDR(&llAddrRoot);    
     PRINTF("\n");
+    
+    PRINT_STAT("\nCTR_RPL_ADD-");
+    PRINT_STAT_LLADDR(&llAddrParent);
+    PRINT_STAT("\n");
 }
 
 //Called from the link-stat module when it receive a message from a neighbor
@@ -170,14 +197,14 @@ void sdn_callback_neighbor(const linkaddr_t *addr){
     }
     add_rule_to_entry(entry, rule);
     add_action_to_entry(entry, action);
-    entry->stats.ttl = 60*10;       // 10 minutes
+    entry->stats.ttl = 60*10*3;       // 30 minutes
     //Check if this neighbor already exits into the flow table
     app = find_entry(entry);
     if(app != NULL){
         //We can't confuse with the rule installed by RPL, and it may happen if the root is our neighbour
         if(app->stats.ttl != 0){
             //It exists, so just update the ttl field
-            app->stats.ttl = 60*10;      // 10 minutes
+            app->stats.ttl = 60*10*3;      // 30 minutes
         }
         deallocate_entry(entry);
     }
@@ -203,9 +230,11 @@ static void callback_decrement_ttl(void *ptr){
         if(entry->stats.ttl == 0){
             app = entry;
             entry = entry->next;
-            printf("EXPIRED: ");
+            PRINTF("EXPIRED: ");
+#if DEBUG == 1
             print_entry(app);
-            printf("\n");
+#endif
+            PRINTF("\n");
             remove_entry(app);
         }
         else
@@ -224,6 +253,8 @@ int add_pending_request(linkaddr_t* mesh_destination){
             PRINTLLADDR(&pending_array[i].mesh_address);
             PRINTF(" has expired\n");
             pending_array[i].valid = 0;
+            if(pending_array[i].payload != NULL)
+                queuebuf_free(pending_array[i].payload);
         }
     }
     //Search for the mesh_destination in valid request slot
@@ -245,6 +276,7 @@ int add_pending_request(linkaddr_t* mesh_destination){
     linkaddr_copy(&pending_array[free_slot].mesh_address, mesh_destination);
     pending_array[free_slot].valid = 1;
     timer_set(&pending_array[free_slot].lifetime_timer, CLOCK_SECOND * COAP_MAX_RETRANSMIT * COAP_RESPONSE_TIMEOUT);
+    pending_array[free_slot].payload = NULL;
     PRINTF("Set pending req for %u seconds with: ", COAP_MAX_RETRANSMIT * COAP_RESPONSE_TIMEOUT);
     PRINTLLADDR(&pending_array[free_slot].mesh_address);
     PRINTF("\n");
@@ -260,6 +292,8 @@ void remove_pending_req(linkaddr_t* mesh_destination){
             PRINTLLADDR(&pending_array[i].mesh_address);
             PRINTF(" has arrived, remove it\n");
             pending_array[i].valid = 0;
+            if(pending_array[i].payload != NULL)
+                queuebuf_free(pending_array[i].payload);
             break;
         }
         
@@ -283,6 +317,7 @@ void handleTableMiss(linkaddr_t* L2_receiver, linkaddr_t* L2_sender, uint8_t* pt
             queuebuf_free(q);
             return;
         }
+        pending_array[pending_index].payload = q;
     }
     req = add_request();
     if(req == NULL){
@@ -307,7 +342,7 @@ void handleTableMiss(linkaddr_t* L2_receiver, linkaddr_t* L2_sender, uint8_t* pt
     //Set payload type and the actual content
     //memcpy(payload, ptr_to_pkt, pkt_dim);
     coap_set_payload(&req->req_packet, queuebuf_dataptr(q), queuebuf_datalen(q));
-    queuebuf_free(q);           //TODO: this function is supposed to be called after the second process sends the request
+    //queuebuf_free(q);                     //TODO: this function is supposed to be called after the second process sends the request
     start_request();                        //But it seems to cause an segmentation fault
 }
 
@@ -416,10 +451,10 @@ static void topology_update(void *ptr){
     ctimer_reset(&timer_topology);
 }
 
- 
+
 void control_agent_init(){
     int i; 
-    unsigned short delay = random_rand() % 30;
+    unsigned short delay = CLOCK_SECOND *(random_rand() % 30);
     ctimer_set(&timer_ttl, TTL_INTERVAL, callback_decrement_ttl, NULL);
     ctimer_set(&timer_topology, TOP_UPDATE_PERIOD + delay, topology_update, NULL);
     flowtable_init();
@@ -475,12 +510,14 @@ void client_table_miss_handler(void *response){
     len = coap_get_payload(response, &chunk);
     if(len == 0)
         return;
+#if DEBUG == 1
     printf("Table miss: ");
     for (i = 0; i < len; i++)
     {
       printf("%02x", chunk[i]);
     }
     printf("\n");
+#endif
     parse_table_miss_response(chunk, len);
 }
 
@@ -501,7 +538,7 @@ PROCESS_THREAD(coap_client_process, ev, data){
     coap_init_engine();
     while(1) {
         PROCESS_YIELD_UNTIL(ev == PROCESS_EVENT_POLL);
-        while((req = get_next_request()) != NULL){
+        while((req = get_ref_to_next_request()) != NULL){
             
             if(req != NULL){
                 if(req->type == TABLE_MISS){
@@ -512,7 +549,7 @@ PROCESS_THREAD(coap_client_process, ev, data){
                     PRINTF("TOPOLOGY UPDATE\n");
                     COAP_BLOCKING_REQUEST(&server_ipaddr, REMOTE_PORT, &req->req_packet, client_topology_update_handler);
                 }
-
+                advance_ring_buf();
             }
         }
     }
