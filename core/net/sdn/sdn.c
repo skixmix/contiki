@@ -15,6 +15,18 @@
 #include "net/sdn/datapath.h"
 #include "net/link-stats.h"
 
+#define SDN_STATS 1
+#if SDN_STATS
+#include <stdio.h>
+#define PRINT_STAT(...) printf(__VA_ARGS__)
+#define PRINT_STAT_LLADDR(addr) PRINTF("[%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x]", ((uint8_t *)addr)[0], ((uint8_t *)addr)[1], ((uint8_t *)addr)[2], ((uint8_t *)addr)[3], ((uint8_t *)addr)[4], ((uint8_t *)addr)[5], ((uint8_t *)addr)[6], ((uint8_t *)addr)[7])
+#define MESH_TAG_CONTROL_HL             0x0c    
+#define MESH_TAG_DATA_HL                0x0e    
+#define MESH_TAG_RPL_HL                 0x0b 
+#else
+#define PRINT_STAT(...)
+#define PRINT_STAT_LLADDR(addr)
+#endif
 
 
 #define DEBUG 0
@@ -105,6 +117,39 @@ int ipAddrListContains(uip_ipaddr_t* ipAddr){
 }
 
 
+int forward(){
+    //DEBUG
+    linkaddr_t* dest;
+    dest = packetbuf_addr(PACKETBUF_ADDR_RECEIVER);
+    PRINTF("SDN: Packet is being sent to: ");
+    PRINTLLADDR(dest);
+    PRINTF("\n");
+    /*------------------------STAT---------------------------*/
+#if SDN_STATS
+    if(pktHasMeshHeader(packetbuf_dataptr()) == 1){
+        uint8_t hopLimit;
+        parseMeshHeader(packetbuf_dataptr(), &hopLimit, NULL, NULL, NULL, NULL);
+        if(hopLimit == MESH_TAG_CONTROL_HL)
+            PRINT_STAT("\nS_FC_%u\n", packetbuf_datalen());
+	else if(hopLimit == MESH_TAG_RPL_HL)
+	    PRINT_STAT("\nS_FR_%u\n", packetbuf_datalen());
+        else
+            PRINT_STAT("\nS_FD_%u\n", packetbuf_datalen());
+    }
+    else
+        PRINT_STAT("\nS_FR_%u\n", packetbuf_datalen());
+#endif
+    /*-------------------------------------------------------*/
+    NETSTACK_LLSEC.send(sent_callback, ptr_copy);
+    //NETSTACK_MAC.send(NULL,NULL);
+    return 1;
+}
+
+int toUpperLayer(){
+    NETSTACK_NETWORK.input();
+    return 1;
+}
+
 /*
  * Input function which is called by the lower layer when a packet is received 
  */
@@ -125,6 +170,22 @@ input(void)
     source = packetbuf_addr(PACKETBUF_ADDR_SENDER);
     PRINTLLADDR(source);
     PRINTF("\n");
+    /*-------------------------------STAT----------------------------------*/
+#if SDN_STATS
+    if(pktHasMeshHeader(ptr) == 1){
+        uint8_t hopLimit;
+        parseMeshHeader(ptr, &hopLimit, NULL, NULL, NULL, NULL);
+        if(hopLimit == MESH_TAG_CONTROL_HL)
+            PRINT_STAT("\nS_IC_%u\n", packetbuf_datalen());
+	else if(hopLimit == MESH_TAG_RPL_HL)
+	    PRINT_STAT("\nS_IR_%u\n", packetbuf_datalen());
+        else
+            PRINT_STAT("\nS_ID_%u\n", packetbuf_datalen());
+    }
+    else
+        PRINT_STAT("\nS_IR_%u\n", packetbuf_datalen());
+#endif
+    
     /*------------------------------Logic------------------------------*/
     //Update link statistics
     link_stats_input_callback(packetbuf_addr(PACKETBUF_ADDR_SENDER));
@@ -304,7 +365,7 @@ send(mac_callback_t sent, void *ptr)
         if(rpl_config == RPL_BYPASS){
             //If the configuration is RPL_BYPASS the RPL packet must 
             //be sent to the lower layer
-            NETSTACK_LLSEC.send(sent, ptr);
+            forward();
         }
         else{
             //Otherwise handle the packet using the Flow Table
@@ -315,24 +376,6 @@ send(mac_callback_t sent, void *ptr)
         //Otherwise handle the packet using the Flow Table
         matchPacket();
     }
-}
-
-int forward(){
-    //DEBUG
-    linkaddr_t* dest;
-    dest = packetbuf_addr(PACKETBUF_ADDR_RECEIVER);
-    PRINTF("SDN: Packet is being sent to: ");
-    PRINTLLADDR(dest);
-    PRINTF("\n");
-
-    NETSTACK_LLSEC.send(sent_callback, ptr_copy);
-    //NETSTACK_MAC.send(NULL,NULL);
-    return 1;
-}
-
-int toUpperLayer(){
-    NETSTACK_NETWORK.input();
-    return 1;
 }
 
 const struct interceptor_driver sdn_driver = {
