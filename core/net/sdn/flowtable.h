@@ -18,12 +18,12 @@
 
 /*-------------------------Constants definition-------------------------------*/
 
-#define MAX_NUM_ENTRIES         10
-#define MAX_NUM_RULES           10
-#define MAX_NUM_ACTIONS         10
+#define MAX_NUM_ENTRIES         30
+#define MAX_NUM_RULES           30
+#define MAX_NUM_ACTIONS         30
 #define NUM_BYTES_2_BLOCKS      0
 #define NUM_BYTES_4_BLOCKS      0
-#define NUM_BYTES_8_BLOCKS      20
+#define NUM_BYTES_8_BLOCKS      60
 #define NUM_BYTES_16_BLOCKS     0
 
 /*---------------------Flow Table data structures-----------------------------*/
