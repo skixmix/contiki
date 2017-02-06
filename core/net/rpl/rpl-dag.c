@@ -58,7 +58,18 @@
 #include <limits.h>
 #include <string.h>
 
+#define SDN_STATS 1
+#if SDN_STATS
+#include <stdio.h>
+#define PRINT_STAT(...) printf(__VA_ARGS__)
+#define PRINT_STAT_LLADDR(addr) printf("%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x", ((uint8_t *)addr)[0], ((uint8_t *)addr)[1], ((uint8_t *)addr)[2], ((uint8_t *)addr)[3], ((uint8_t *)addr)[4], ((uint8_t *)addr)[5], ((uint8_t *)addr)[6], ((uint8_t *)addr)[7])
+#else
+#define PRINT_STAT(...)
+#define PRINT_STAT_LLADDR(addr)
+#endif
+
 #define DEBUG DEBUG_NONE
+//#define DEBUG DEBUG_PRINT
 #include "net/ip/uip-debug.h"
 
 /* A configurable function called after every RPL parent switch */
@@ -253,6 +264,25 @@ rpl_set_preferred_parent(rpl_dag_t *dag, rpl_parent_t *p)
 #ifdef RPL_CALLBACK_PARENT_SWITCH
     RPL_CALLBACK_PARENT_SWITCH(dag->preferred_parent, p);
 #endif /* RPL_CALLBACK_PARENT_SWITCH */
+    
+#if NETSTACK_CONF_SDN == 0
+#if SDN_STATS
+    uint8_t addrDim;
+    linkaddr_t llAddrParent;
+    if(dag->preferred_parent != NULL){
+        extractIidFromIpAddr(&llAddrParent, rpl_get_parent_ipaddr(dag->preferred_parent), &addrDim);
+        PRINT_STAT("\nCTR_RPL_REM-");
+        PRINT_STAT_LLADDR(&llAddrParent);
+        PRINT_STAT("\n");
+    }
+    if(p != NULL){
+        extractIidFromIpAddr(&llAddrParent, rpl_get_parent_ipaddr(p), &addrDim);
+        PRINT_STAT("\nCTR_RPL_ADD-");
+        PRINT_STAT_LLADDR(&llAddrParent);
+        PRINT_STAT("\n");
+    }
+#endif
+#endif
 
     /* Always keep the preferred parent locked, so it remains in the
      * neighbor table. */
