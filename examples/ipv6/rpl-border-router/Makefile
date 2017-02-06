@@ -40,7 +40,7 @@ ifeq ($(PREFIX),)
  PREFIX = fd00::1/64
 endif
 #ADDED
-CONTIKI_WITH_SDN = 1
+CONTIKI_WITH_SDN = 0
 #ADDED
 CONTIKI_WITH_IPV6 = 1
 include $(CONTIKI)/Makefile.include

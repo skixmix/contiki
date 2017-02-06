@@ -48,8 +48,9 @@
 #include "net/netstack.h"
 #include "dev/button-sensor.h"
 #include "dev/slip.h"
-//ADDED
+#if NETSTACK_CONF_SDN == 1
 #include "net/sdn/control_agent.h"
+#endif
 //ADDED
 
 #include <stdio.h>
@@ -399,7 +400,11 @@ set_prefix_64(uip_ipaddr_t *prefix_64)
     PRINTF("created a new RPL dag\n");
   }
 #if NETSTACK_CONF_SDN == 1
-  control_agent_init();
+  //I've tried to put this function call into the sdn module initialization function
+  //which is called by the netstack module at startup time.
+  //But it seems to not work correctly, the coap engine sends bad formatted request to the server
+  //for instance with no source Coap port
+  control_agent_init();         
 #endif
 }
 /*---------------------------------------------------------------------------*/
