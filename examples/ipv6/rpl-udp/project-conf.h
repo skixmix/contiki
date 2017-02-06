@@ -37,16 +37,10 @@
 #undef NBR_TABLE_CONF_MAX_NEIGHBORS
 #undef UIP_CONF_MAX_ROUTES
 
-#ifdef TEST_MORE_ROUTES
-/* configure number of neighbors and routes */
-#define NBR_TABLE_CONF_MAX_NEIGHBORS     10
-#define UIP_CONF_MAX_ROUTES   30
-#else
-/* configure number of neighbors and routes */
-#define NBR_TABLE_CONF_MAX_NEIGHBORS     10
-#define UIP_CONF_MAX_ROUTES   10
-#endif /* TEST_MORE_ROUTES */
 
+/* configure number of neighbors and routes */
+#define NBR_TABLE_CONF_MAX_NEIGHBORS     15
+#define UIP_CONF_MAX_ROUTES   15
 
 #undef NETSTACK_CONF_RDC
 #define NETSTACK_CONF_RDC     nullrdc_driver
@@ -61,17 +55,45 @@
 #define RPL_CONF_DEFAULT_LIFETIME        10
 
 #define RPL_CONF_DEFAULT_ROUTE_INFINITE_LIFETIME 1
+
+#define SERVER_REPLY 1
+#undef RPL_CONF_MAX_DAG_PER_INSTANCE
+#define RPL_CONF_MAX_DAG_PER_INSTANCE 1
+#define TESTBED 1
+#undef UIP_CONF_ND6_SEND_NA
+#define UIP_CONF_ND6_SEND_NA 0
+#undef RPL_CONF_STATS
+#define RPL_CONF_STATS 0
+#undef PROCESS_CONF_STATS
+#define PROCESS_CONF_STATS 0
+#ifndef QUEUEBUF_CONF_NUM
+#define QUEUEBUF_CONF_NUM          4
+#endif
 //ADDED
 #if NETSTACK_CONF_SDN == 1
+#define TESTBED 1
+#undef UIP_CONF_TCP
+#define UIP_CONF_TCP 0
+#undef COAP_OBSERVING
+#define COAP_OBSERVING 0
+#undef COAP_BLOCK
+#define COAP_BLOCK 1
+#undef COAP_SEPARATE
+#define COAP_SEPARATE 0
+
+#define RPL_DAO_ENABLE 0
+
 #define RPL_CALLBACK_PARENT_SWITCH sdn_rpl_callback_parent_switch
 #define SDN_CALLBACK_ADD_NEIGHBOR sdn_callback_neighbor
 #endif
 
-#define SICSLOWPAN_CONF_FRAG 0
+#undef SICSLOWPAN_CONF_FRAG
+#define SICSLOWPAN_CONF_FRAG 1
 //ADDED
+
 #if WITH_NON_STORING
 #undef RPL_NS_CONF_LINK_NUM
-#define RPL_NS_CONF_LINK_NUM 40 /* Number of links maintained at the root. Can be set to 0 at non-root nodes. */
+#define RPL_NS_CONF_LINK_NUM 0 /* Number of links maintained at the root. Can be set to 0 at non-root nodes. */
 #undef UIP_CONF_MAX_ROUTES
 #define UIP_CONF_MAX_ROUTES 0 /* No need for routes */
 #undef RPL_CONF_MOP
