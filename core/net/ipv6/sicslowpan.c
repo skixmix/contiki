@@ -72,6 +72,21 @@
 #include "net/rpl/rpl.h"
 #include <stdio.h>
 
+#define SDN_STATS 1
+#if SDN_STATS
+#include <stdio.h>
+#define PRINT_STAT(...) printf(__VA_ARGS__)
+#define PRINT_STAT_LLADDR(addr) printf("%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x", ((uint8_t *)addr)[0], ((uint8_t *)addr)[1], ((uint8_t *)addr)[2], ((uint8_t *)addr)[3], ((uint8_t *)addr)[4], ((uint8_t *)addr)[5], ((uint8_t *)addr)[6], ((uint8_t *)addr)[7])
+#define MESH_TAG_CONTROL_HL             0x0c    
+#define MESH_TAG_DATA_HL                0x0e    
+#define MESH_TAG_RPL_HL                0x0b    
+uip_ipaddr_t controller_ipaddr;
+uip_ipaddr_t udpServer_ipaddr;
+#else
+#define PRINT_STAT(...)
+#define PRINT_STAT_LLADDR(addr)
+#endif
+
 #define DEBUG DEBUG_NONE
 //#define DEBUG DEBUG_PRINT
 #include "net/ip/uip-debug.h"
@@ -715,6 +730,8 @@ void selectFinalDestinationAddress(linkaddr_t* finalAddress, uint8_t* addrDim){
         return;
     
     dag = rpl_get_any_dag();
+    if(dag == NULL)
+        return;
 
     //Check if the destination node does not belong to this 6LoWPAN network i.e. if the
     //destination address is off-link
@@ -727,15 +744,15 @@ void selectFinalDestinationAddress(linkaddr_t* finalAddress, uint8_t* addrDim){
             //TODO: Drop the packet
         }
         else{
-            printf(" Destination offlink\n");    //DEBUG
+            PRINTF(" Destination offlink\n");    //DEBUG
             //Select the destination ip address equals to the root's one
             dest_ip = &dag->dag_id;
             if(dest_ip == NULL){
-                printf("No root address found ");   //TODO: change in PRINTF
+                PRINTF("No root address found ");   //TODO: change in PRINTF
             }
             else{
-                printf("DEFAULT GATEWAY IP ADDR: "); //TODO: change in PRINTF
-                uip_debug_ipaddr_print(dest_ip);    //TODO: change in debug PRINTF
+                PRINTF("DEFAULT GATEWAY IP ADDR: "); //TODO: change in PRINTF
+                PRINT6ADDR(dest_ip);    //TODO: change in debug PRINTF
                 extractIidFromIpAddr(finalAddress, dest_ip, addrDim);
             }
         }      
@@ -757,10 +774,20 @@ void insertMeshHeader(){
     
     //TODO: the standard impose that if Hop Limit field is uqual to 1111, there 
     //must be a subsequent byte that specifies the actual Hop Limit
-    
+#if SDN_STATS
+    uip_ip6addr(&controller_ipaddr, 0xfd00, 0, 0, 0, 0, 0, 0, 0x0001);
+    uip_ip6addr(&udpServer_ipaddr, 0xfd00, 0, 0, 0, 0, 0, 0, 0x0002);
+    if(uip_ipaddr_cmp(&UIP_IP_BUF->destipaddr, &controller_ipaddr) == 1 || uip_ipaddr_cmp(&UIP_IP_BUF->srcipaddr, &controller_ipaddr) == 1)
+        dispatch |= MESH_TAG_CONTROL_HL;
+    else if(uip_ipaddr_cmp(&UIP_IP_BUF->destipaddr, &udpServer_ipaddr) == 1 || uip_ipaddr_cmp(&UIP_IP_BUF->srcipaddr, &udpServer_ipaddr) == 1)
+        dispatch |= MESH_TAG_DATA_HL; 
+    else
+	dispatch |= MESH_TAG_RPL_HL;
+
+#else    
     //Set the Hop Limit field equal to the maximum (TODO: handle different values)
     dispatch |= MESH_DEFAULT_HL;
-    
+#endif
     selectFinalDestinationAddress(&finalAddress, &addrDim);
     
     if(addrDim == 8){ //Long unicast address
@@ -1290,13 +1317,6 @@ uncompress_hdr_iphc(uint8_t *buf, uint16_t ip_len)
   /* put the source address compression mode SAM in the tmp var */
   tmp = ((iphc1 & SICSLOWPAN_IPHC_SAM_11) >> SICSLOWPAN_IPHC_SAM_BIT) & 0x03;
   
-  //DEBUG
-  printf("Mesh source: ");
-  print_ll_addr((uint8_t*)mesh_src);
-  printf("15.4 source: ");
-  print_ll_addr((uint8_t*)packetbuf_addr(PACKETBUF_ADDR_SENDER));
-  printf("\n");  
-  //DEBUG
   
   /* context based compression */
   if(iphc1 & SICSLOWPAN_IPHC_SAC) {
@@ -1725,12 +1745,13 @@ my_copypayload:
 #if SICSLOWPAN_CONF_FRAG
     }
 #endif /* SICSLOWPAN_CONF_FRAG */
-    //DEBUG
+#if DEBUG
     printf("ReadIP: Dst: ");
     uip_debug_ipaddr_print(&UIP_IP_BUF->destipaddr);
     printf(" Src: ");
     uip_debug_ipaddr_print(&UIP_IP_BUF->srcipaddr);
     printf("\n");
+#endif
     //DEBUG
         memcpy(destAddr, &UIP_IP_BUF->destipaddr, sizeof(uip_ipaddr_t));
         return 1;
@@ -1801,6 +1822,15 @@ send_packet(linkaddr_t *dest)
   packetbuf_set_addr(PACKETBUF_ADDR_SENDER,(void*)&uip_lladdr);
 #endif
 
+#if NETSTACK_CONF_SDN == 0
+#if SDN_STATS
+  uip_ip6addr(&udpServer_ipaddr, 0xfd00, 0, 0, 0, 0, 0, 0, 0x0002);
+  if(uip_ipaddr_cmp(&UIP_IP_BUF->destipaddr, &udpServer_ipaddr) == 1 || uip_ipaddr_cmp(&UIP_IP_BUF->srcipaddr, &udpServer_ipaddr) == 1)
+      PRINT_STAT("\nS_FD_%u\n", packetbuf_datalen());
+  else
+      PRINT_STAT("\nS_FR_%u\n", packetbuf_datalen());
+#endif
+#endif
   /* Provide a callback function to receive the result of
      a packet transmission. */
 #if NETSTACK_CONF_SDN == 1
@@ -2326,13 +2356,13 @@ input(void)
       callback->input_callback();
     }
 
-    //DEBUG
+#if DEBUG
     printf("Input: Dst: ");
     uip_debug_ipaddr_print(&UIP_IP_BUF->destipaddr);
     printf(" Src: ");
     uip_debug_ipaddr_print(&UIP_IP_BUF->srcipaddr);
     printf("\n");
-    //DEBUG
+#endif
             
     tcpip_input();
 #if SICSLOWPAN_CONF_FRAG
