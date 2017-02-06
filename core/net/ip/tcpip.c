@@ -612,6 +612,10 @@ tcpip_ipv6_output(void)
 #else
           PRINTF("tcpip_ipv6_output: Destination off-link but no route\n");
 #endif /* !UIP_FALLBACK_INTERFACE */
+          
+#if NETSTACK_CONF_SDN == 1
+            tcpip_output(NULL);             //When SDN is turned on, we don't care about the IP routing table
+#endif                                      //send any packet to the flow table even if the routing table doesn't have a relative entry
           uip_clear_buf();
           return;
         }
