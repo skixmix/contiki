@@ -77,13 +77,13 @@
 #include "net/ip/uip-debug.h"
 
 #ifndef PERIOD
-#define PERIOD 30
+#define PERIOD 60
 #endif
 
 #define START_INTERVAL		(15 * CLOCK_SECOND)
 #define SEND_INTERVAL		(PERIOD * CLOCK_SECOND)
 #define SEND_TIME		(random_rand() % (SEND_INTERVAL))
-#define MAX_PAYLOAD_LEN		30
+#define MAX_PAYLOAD_LEN		80
 #define NUM_OF_RECEIVERS        4
 
 static struct uip_udp_conn *client_conn;
@@ -107,7 +107,7 @@ tcpip_handler(void)
     str[uip_datalen()] = '\0';
     reply++;
     printf("DATA recv '%s' (s:%d, r:%d)\n", str, seq_id, reply);
-    PRINT_STAT("\nC_R_%s\n", str + 27);
+    PRINT_STAT("\nC_R_%s\n", str + 46);
   }
 }
 /*---------------------------------------------------------------------------*/
@@ -137,7 +137,7 @@ send_packet(void *ptr)
   PRINT_STAT("\nC_S_%d->%d\n", seq_id, server_ipaddr[rand_index].u8[sizeof(server_ipaddr[rand_index].u8) - 1]);
   PRINTF("DATA send to %d 'Hello %d'\n",
          server_ipaddr[rand_index].u8[sizeof(server_ipaddr[rand_index].u8) - 1], seq_id);
-  sprintf(buf, "Hello, sequence id = %d", seq_id);
+  sprintf(buf, "Hello, this is a payload, sequence id = %d", seq_id);
   uip_udp_packet_sendto(client_conn, buf, strlen(buf),
                         &server_ipaddr[rand_index], UIP_HTONS(UDP_SERVER_PORT));
 }
@@ -187,10 +187,16 @@ set_global_address(void)
  
 #if 1
 /* Mode 1 - 64 bits inline */
+   /*
    uip_ip6addr(&server_ipaddr[0], UIP_DS6_DEFAULT_PREFIX, 0, 0, 0, 0x0207, 7, 7, 7);
    uip_ip6addr(&server_ipaddr[1], UIP_DS6_DEFAULT_PREFIX, 0, 0, 0, 0x0208, 8, 8, 8);
    uip_ip6addr(&server_ipaddr[2], UIP_DS6_DEFAULT_PREFIX, 0, 0, 0, 0x0209, 9, 9, 9);
    uip_ip6addr(&server_ipaddr[3], UIP_DS6_DEFAULT_PREFIX, 0, 0, 0, 0x020a, 0x000a, 0x000a, 0x000a);
+   */
+   uip_ip6addr(&server_ipaddr[0], UIP_DS6_DEFAULT_PREFIX, 0, 0, 0, 0, 0, 0, 2);
+   uip_ip6addr(&server_ipaddr[1], UIP_DS6_DEFAULT_PREFIX, 0, 0, 0, 0, 0, 0, 2);
+   uip_ip6addr(&server_ipaddr[2], UIP_DS6_DEFAULT_PREFIX, 0, 0, 0, 0, 0, 0, 2);
+   uip_ip6addr(&server_ipaddr[3], UIP_DS6_DEFAULT_PREFIX, 0, 0, 0, 0, 0, 0, 2);
 #elif 0
 /* Mode 2 - 16 bits inline */
   uip_ip6addr(&server_ipaddr, UIP_DS6_DEFAULT_PREFIX, 0, 0, 0, 0, 0x00ff, 0xfe00, 1);
