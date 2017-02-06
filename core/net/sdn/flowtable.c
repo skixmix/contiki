@@ -8,6 +8,15 @@
 
 #include "flowtable.h"
 
+#define SDN_STATS 1
+#if SDN_STATS
+#include <stdio.h>
+#define PRINT_STAT(...) printf(__VA_ARGS__)
+#define PRINT_STAT_LLADDR(addr) printf("%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x", ((uint8_t *)addr)[0], ((uint8_t *)addr)[1], ((uint8_t *)addr)[2], ((uint8_t *)addr)[3], ((uint8_t *)addr)[4], ((uint8_t *)addr)[5], ((uint8_t *)addr)[6], ((uint8_t *)addr)[7])
+#else
+#define PRINT_STAT(...)
+#define PRINT_STAT_LLADDR(addr)
+#endif
 
 #define DEBUG 0
 #if DEBUG && (!SINK || DEBUG_SINK)
@@ -587,8 +596,12 @@ uint8_t* install_flow_entry_from_cbor(cn_cbor* flowEntry){
         return NULL;
     if(flowEntry->type == CN_CBOR_ARRAY){
         support = flowEntry->first_child;
+        if(support == NULL)
+            return NULL;
         priority = (uint16_t)support->v.uint;
         support = support->next;
+        if(support == NULL)
+            return NULL;
         ttl = (uint16_t)support->v.uint;
         //Create the flow entry
         entry = create_entry(priority);
@@ -596,9 +609,13 @@ uint8_t* install_flow_entry_from_cbor(cn_cbor* flowEntry){
             return NULL;
         entry->stats.ttl = ttl;
         support = support->next;
+        if(support == NULL){
+            deallocate_entry(entry);
+            return NULL;
+        }
         if(support->type == CN_CBOR_ARRAY){          //Rules
             for (child = support->first_child; child != NULL; child = child->next) {
-                if(child->type == CN_CBOR_ARRAY){
+                if(child->type == CN_CBOR_ARRAY && child->length == 5){
                     inner = child->first_child;
                     field = (field_t)inner->v.uint;
                     inner = inner->next;
@@ -610,6 +627,10 @@ uint8_t* install_flow_entry_from_cbor(cn_cbor* flowEntry){
                     inner = inner->next;
                     value = (uint8_t*)inner->v.str;
                     rule = create_rule(field, offset, size, operator, value);
+                    if(rule == NULL){
+                        deallocate_entry(entry);
+                        return NULL;
+                    }
                 }
                 add_rule_to_entry(entry, rule);
             }  
@@ -619,9 +640,13 @@ uint8_t* install_flow_entry_from_cbor(cn_cbor* flowEntry){
             return NULL;
         }
         support = support->next;
+        if(support == NULL){
+            deallocate_entry(entry);
+            return NULL;
+        }
         if(support->type == CN_CBOR_ARRAY){          //Actions
             for (child = support->first_child; child != NULL; child = child->next) {
-                if(child->type == CN_CBOR_ARRAY){
+                if(child->type == CN_CBOR_ARRAY && child->length == 5){
                     inner = child->first_child;
                     actionType = (action_type_t)inner->v.uint;
                     inner = inner->next;
@@ -633,6 +658,10 @@ uint8_t* install_flow_entry_from_cbor(cn_cbor* flowEntry){
                     inner = inner->next;
                     value = (uint8_t*)inner->v.str;
                     action = create_action(actionType, field, offset, size, value);
+                    if(action == NULL){
+                        deallocate_entry(entry);
+                        return NULL;
+                    }
                 }
                 add_action_to_entry(entry, action);
             }  
@@ -642,8 +671,17 @@ uint8_t* install_flow_entry_from_cbor(cn_cbor* flowEntry){
             return NULL;
         }
     }
+    /*--------------------------STAT-----------------------------*/
+    PRINT_STAT("\nF_E_");
+    PRINT_STAT_LLADDR(rule->value.bytes);
+    PRINT_STAT("->");
+    PRINT_STAT_LLADDR(action->value.bytes);
+    PRINT_STAT("\n");
+    /*-----------------------------------------------------------*/
     PRINTF("Installed: ");
+#if DEBUG == 1
     print_entry(entry);
+#endif    
     PRINTF("\n");
     if(add_entry_to_ft(entry) != 1){
         deallocate_entry(entry);
@@ -660,6 +698,7 @@ uint8_t* install_flow_entry_from_cbor(cn_cbor* flowEntry){
 
 void flowtable_test(){
     uint8_t addr_tunslip[8]  = {0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01};
+    uint8_t addr_udpServer[8]  = {0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02};
     uint8_t addr_1[8]  = {0x00, 0x01, 0x00, 0x01, 0x00, 0x01, 0x00, 0x01};
     //uint8_t addr_1[8]  = {0x00, 0x12, 0x74, 0x00, 0x16, 0xc0, 0x77, 0xed};
     //uint8_t addr_1[8]  = {0x00, 0x12, 0x74, 0x00, 0x10, 0x20, 0x29, 0x1a};
@@ -668,14 +707,14 @@ void flowtable_test(){
     entry_t* entry;
     
     if(memcmp(&linkaddr_node_addr, addr_1, 8) == 0){
-        /*
+        
         entry = create_entry(1);
-        rule = create_rule(MH_DST_ADDR, 0, 64, EQUAL, addr_3);
-        action= create_action(FORWARD, NO_FIELD, 0, 64, addr_2);
+        rule = create_rule(MH_DST_ADDR, 0, 64, EQUAL, addr_udpServer);
+        action= create_action(TO_UPPER_L, NO_FIELD, 0, 64, NULL);
         add_rule_to_entry(entry, rule);    
         add_action_to_entry(entry, action);
         add_entry_to_ft(entry);
-        
+        /*
         entry = create_entry(1);
         rule = create_rule(MH_DST_ADDR, 0, 64, EQUAL, addr_4);
         action= create_action(FORWARD, NO_FIELD, 0, 64, addr_2);

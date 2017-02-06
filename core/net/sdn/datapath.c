@@ -241,13 +241,8 @@ uint8_t evaluateRule(rule_t* rule){
     
     
     //DEBUG
-    if(rule->size <= 8)
-        PRINTF(" %02x",rule->value.byte);
-    else
-        PRINTLLADDR(rule->value.bytes);
-    PRINTF("\n");
-    PRINTLLADDR(copy_buffer);
-    PRINTF("\n");
+    //PRINTLLADDR(copy_buffer);
+    //PRINTF("\n");
     //DEBUG
     
     //Carry out the actual comparison
@@ -436,8 +431,8 @@ int matchPacket(){
         //DEBUG
 #if DEBUG == 1
         print_entry(entry);
-#endif
         PRINTF("\n");
+#endif        
         //Check if every condition is satisfied
         for(rule = list_head(entry->rules); rule != NULL; rule = rule->next){
             //Assess the rule
