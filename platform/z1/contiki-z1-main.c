@@ -151,20 +151,26 @@ set_rime_addr(void)
   }
 #endif
   linkaddr_set_node_addr(&addr);
+#ifndef TESTBED
   printf("Rime started with address ");
   for(i = 0; i < sizeof(addr.u8) - 1; i++) {
     printf("%d.", addr.u8[i]);
   }
   printf("%d\n", addr.u8[i]);
+#endif
 }
 /*---------------------------------------------------------------------------*/
 static void
 print_processes(struct process *const processes[])
 {
   /*  const struct process * const * p = processes;*/
+#ifndef TESTBED
   printf("Starting");
+#endif
   while(*processes != NULL) {
+#ifndef TESTBED
     printf(" '%s'", (*processes)->name);
+#endif
     processes++;
   }
   putchar('\n');
@@ -176,10 +182,12 @@ set_gateway(void)
 {
   if(!is_gateway) {
     leds_on(LEDS_RED);
+#ifndef TESTBED
     printf("%d.%d: making myself the IP network gateway.\n\n",
            linkaddr_node_addr.u8[0], linkaddr_node_addr.u8[1]);
     printf("IPv4 address of the gateway: %d.%d.%d.%d\n\n",
            uip_ipaddr_to_quad(&uip_hostaddr));
+#endif
     uip_over_mesh_set_gateway(&linkaddr_node_addr);
     uip_over_mesh_make_announced_gateway();
     is_gateway = 1;
@@ -287,10 +295,11 @@ main(int argc, char **argv)
       linkaddr_node_addr.u8[1];
     memset(longaddr, 0, sizeof(longaddr));
     linkaddr_copy((linkaddr_t *)&longaddr, &linkaddr_node_addr);
+#ifndef TESTBED
     printf("MAC %02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x ",
            longaddr[0], longaddr[1], longaddr[2], longaddr[3],
            longaddr[4], longaddr[5], longaddr[6], longaddr[7]);
-
+#endif
     cc2420_set_pan_addr(IEEE802154_PANID, shortaddr, longaddr);
   }
 
@@ -323,15 +332,15 @@ main(int argc, char **argv)
     NETSTACK_INTERCEPTOR.init();
 #endif  
   NETSTACK_NETWORK.init();
-
+#ifndef TESTBED
   printf("%s %s, channel check rate %lu Hz, radio channel %u\n",
          NETSTACK_MAC.name, NETSTACK_RDC.name,
          CLOCK_SECOND / (NETSTACK_RDC.channel_check_interval() == 0 ? 1 :
                          NETSTACK_RDC.channel_check_interval()),
          CC2420_CONF_CHANNEL);
-
+#endif
   process_start(&tcpip_process, NULL);
-
+#ifndef TESTBED
   printf("Tentative link-local IPv6 address ");
   {
     uip_ds6_addr_t *lladdr;
@@ -343,6 +352,7 @@ main(int argc, char **argv)
     }
     printf("%02x%02x\n", lladdr->ipaddr.u8[14], lladdr->ipaddr.u8[15]);
   }
+#endif
 
   if(!UIP_CONF_IPV6_RPL) {
     uip_ipaddr_t ipaddr;
@@ -350,6 +360,7 @@ main(int argc, char **argv)
     uip_ip6addr(&ipaddr, UIP_DS6_DEFAULT_PREFIX, 0, 0, 0, 0, 0, 0, 0);
     uip_ds6_set_addr_iid(&ipaddr, &uip_lladdr);
     uip_ds6_addr_add(&ipaddr, 0, ADDR_TENTATIVE);
+#ifndef TESTBED
     printf("Tentative global IPv6 address ");
     for(i = 0; i < 7; ++i) {
       printf("%02x%02x:",
@@ -357,6 +368,8 @@ main(int argc, char **argv)
     }
     printf("%02x%02x\n",
            ipaddr.u8[7 * 2], ipaddr.u8[7 * 2 + 1]);
+#endif
+
   }
 
 #else /* NETSTACK_CONF_WITH_IPV6 */
@@ -364,14 +377,17 @@ main(int argc, char **argv)
   NETSTACK_RDC.init();
   NETSTACK_MAC.init();
   NETSTACK_LLSEC.init();
+#if NETSTACK_CONF_SDN == 1
   NETSTACK_INTERCEPTOR.init();
+#endif
   NETSTACK_NETWORK.init();
-
+#ifndef TESTBED
   printf("%s %s, channel check rate %lu Hz, radio channel %u\n",
          NETSTACK_MAC.name, NETSTACK_RDC.name,
          CLOCK_SECOND / (NETSTACK_RDC.channel_check_interval() == 0 ? 1 :
                          NETSTACK_RDC.channel_check_interval()),
          CC2420_CONF_CHANNEL);
+#endif
 #endif /* NETSTACK_CONF_WITH_IPV6 */
 
 #if !NETSTACK_CONF_WITH_IPV4 && !NETSTACK_CONF_WITH_IPV6
@@ -410,8 +426,10 @@ main(int argc, char **argv)
     uip_over_mesh_set_gateway_netif(&slipif);
     uip_fw_default(&meshif);
     uip_over_mesh_init(UIP_OVER_MESH_CHANNEL);
+#ifndef TESTBED
     printf("uIP started with IP address %d.%d.%d.%d\n",
            uip_ipaddr_to_quad(&hostaddr));
+#endif
   }
 #endif /* NETSTACK_CONF_WITH_IPV4 */
 
@@ -486,7 +504,9 @@ main(int argc, char **argv)
 void
 log_message(char *m1, char *m2)
 {
+#ifndef TESTBED
   printf("%s%s\n", m1, m2);
+#endif
 }
 #endif /* LOG_CONF_ENABLED */
 
