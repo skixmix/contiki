@@ -193,6 +193,13 @@ packet_input(void)
 {
   if(uip_len > 0) {
 
+    
+    PRINTF("packet_input: IPv6 Packet src=");
+    PRINT6ADDR(&UIP_IP_BUF->srcipaddr);
+    PRINTF(" dst=");
+    PRINT6ADDR(&UIP_IP_BUF->destipaddr);
+    PRINTF("\n");
+
 #if UIP_CONF_IP_FORWARD
     tcpip_is_forwarding = 1;
     if(uip_fw_forward() != UIP_FW_LOCAL) {
@@ -559,6 +566,12 @@ tcpip_ipv6_output(void)
   }
 #endif /* UIP_CONF_IPV6_RPL */
 
+  PRINTF("tcpip_ipv6_output: IPv6 Packet src=");
+  PRINT6ADDR(&UIP_IP_BUF->srcipaddr);
+  PRINTF(" dst=");
+  PRINT6ADDR(&UIP_IP_BUF->destipaddr);
+  PRINTF("\n");
+
   if(!uip_is_addr_mcast(&UIP_IP_BUF->destipaddr)) {
     /* Next hop determination */
 
@@ -752,6 +765,7 @@ tcpip_ipv6_output(void)
       return;
     }
   }
+  PRINTF("tcpip_ipv6_output: Multicast packet\n");
   /* Multicast IP destination address. */
   tcpip_output(NULL);
   uip_clear_buf();
