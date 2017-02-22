@@ -72,7 +72,7 @@
 #include "net/rpl/rpl.h"
 #include <stdio.h>
 
-#define SDN_STATS 1
+#define SDN_STATS 0
 #if SDN_STATS
 #include <stdio.h>
 #define PRINT_STAT(...) printf(__VA_ARGS__)
@@ -624,8 +624,8 @@ compress_addr_64(uint8_t bitpos, uip_ipaddr_t *ipaddr, uip_lladdr_t *lladdr)
 #define MAX_NUM_ROUTE_OVER_ADDRS    5
 #define MESH_ORIGINATOR_ADDR        1 
 #define MESH_FINAL_ADDR             9
-#define MESH_V_FLAG                 4
-#define MESH_F_FLAG                 5
+#define MESH_V_FLAG                 5
+#define MESH_F_FLAG                 4
 #define MESH_DEFAULT_HL             0x0e    /* xxxx1110 */
 uip_ipaddr_t routeOverAddrList[MAX_NUM_ROUTE_OVER_ADDRS];
 
@@ -652,7 +652,7 @@ void extractIidFromIpAddr(linkaddr_t* llAddr, uip_ip6addr_t* ipAddr, uint8_t* ad
         return;
     memset(llAddr, 0, 8);
     //Check if the IPv6 address is multicast
-    if(uip_is_addr_mcast(ipAddr) != 1){
+    if(!uip_is_addr_mcast(ipAddr)){
         //It is unicast, so extract the 64-bit-long MAC address straight from the IID
         memcpy(llAddr->u8, ipAddr->u8 + 8, 8);
         llAddr->u8[0] ^= 0x02;
@@ -668,8 +668,8 @@ void extractIidFromIpAddr(linkaddr_t* llAddr, uip_ip6addr_t* ipAddr, uint8_t* ad
 }
 
 uint8_t parseMeshHeader(uint8_t* ptr_to_packet, uint8_t* hopLimit, 
-        linkaddr_t* finalAddr, uint8_t* finalAddrDim, 
-        linkaddr_t* origAddr, uint8_t* origAddrDim){
+        uint8_t* finalAddr, uint8_t* finalAddrDim, 
+        uint8_t* origAddr, uint8_t* origAddrDim){
     
     uint8_t meshHeaderSize = 0;
     uint8_t* ptr;
@@ -696,7 +696,7 @@ uint8_t parseMeshHeader(uint8_t* ptr_to_packet, uint8_t* hopLimit,
     }
     else{                               //16-bit long originator address
         if(origAddr != NULL) 
-            memcpy(origAddr + 6, ptr + MESH_ORIGINATOR_ADDR, 2);
+            memcpy(origAddr, ptr + MESH_ORIGINATOR_ADDR, 2);
         meshHeaderSize += 2;
         if(origAddrDim != NULL)
             *origAddrDim = 2;
@@ -712,11 +712,18 @@ uint8_t parseMeshHeader(uint8_t* ptr_to_packet, uint8_t* hopLimit,
     }
     else{                               //16-bit long final address
         if(finalAddr != NULL) 
-            memcpy(finalAddr + 6, ptr + MESH_FINAL_ADDR, 2);
+            memcpy(finalAddr, ptr + MESH_FINAL_ADDR, 2);
         meshHeaderSize += 2;
         if(finalAddrDim != NULL)
             *finalAddrDim = 2;
-    }        
+    }      
+/*
+    int i;
+    printf("\nMESH HEADER = ");
+    for(i = 0; i < meshHeaderSize; i++)
+        printf("%02x", ptr[i]);
+    printf("\n");
+*/    
     return meshHeaderSize;
 }
 
@@ -728,14 +735,15 @@ void selectFinalDestinationAddress(linkaddr_t* finalAddress, uint8_t* addrDim){
     
     if(finalAddress == NULL || addrDim == NULL)
         return;
-    
+ 
     dag = rpl_get_any_dag();
     if(dag == NULL)
         return;
-
+    
     //Check if the destination node does not belong to this 6LoWPAN network i.e. if the
     //destination address is off-link
-    if(uip_ds6_is_addr_onlink(&UIP_IP_BUF->destipaddr) != 1 
+    if(!uip_is_addr_mcast(&UIP_IP_BUF->destipaddr) 
+            && uip_ds6_is_addr_onlink(&UIP_IP_BUF->destipaddr) != 1 
             && uip_ipaddr_prefixcmp(&dag->prefix_info.prefix, &UIP_IP_BUF->destipaddr, dag->prefix_info.length) != 1){
         
         //Check if this node is the root of the dodag, 
@@ -766,8 +774,8 @@ void selectFinalDestinationAddress(linkaddr_t* finalAddress, uint8_t* addrDim){
 
 void insertMeshHeader(){
     uint8_t dispatch;
-    uint8_t meshHeaderSize;
-    uint8_t addrDim;
+    uint8_t meshHeaderSize = 0;
+    uint8_t addrDim = 0;
     linkaddr_t finalAddress;
     //Set the dispatch type equal to the Mesh one
     dispatch = SICSLOWPAN_DISPATCH_MESH;
@@ -821,13 +829,18 @@ void insertMeshHeader(){
         //Copy the originator MAC address into the Mesh Header
         memcpy(packetbuf_ptr + MESH_ORIGINATOR_ADDR, linkaddr_node_addr.u8, LINKADDR_SIZE);
         //Copy the final MAC address into the Mesh Header 
-        memcpy(packetbuf_ptr + MESH_FINAL_ADDR, finalAddress.u8 + 6, 2);
-        
-        
+        memcpy(packetbuf_ptr + MESH_FINAL_ADDR, finalAddress.u8 + 6, 2);       
     }
     //Set the dispatch type into the packet
     *(packetbuf_ptr) = dispatch;
     
+/*
+    int i;
+    printf("\nMESH HEADER %d = ", addrDim);
+    for(i = 0; i < meshHeaderSize; i++)
+        printf("%02x", packetbuf_ptr[i]);
+    printf("\n");
+*/
 }
 
 uint8_t computeMeshHeaderLength(){
@@ -1547,7 +1560,7 @@ int readIPaddr(uip_ipaddr_t* destAddr){
     }
     if(pktHasMeshHeader(NULL)){
         mesh_src = memb_alloc(&linkaddr_memb);
-        packetbuf_hdr_len += parseMeshHeader(NULL, NULL, NULL, NULL, mesh_src, NULL);
+        packetbuf_hdr_len += parseMeshHeader(NULL, NULL, NULL, NULL, &(mesh_src->u8), NULL);
     }
     
 
@@ -2154,7 +2167,7 @@ input(void)
   if(pktHasMeshHeader(NULL)){
       mesh_src = memb_alloc(&linkaddr_memb);
       //Just take the originator address for uncompression purpose
-      packetbuf_hdr_len += parseMeshHeader(NULL, NULL, NULL, NULL, mesh_src, NULL);
+      packetbuf_hdr_len += parseMeshHeader(NULL, NULL, NULL, NULL, &(mesh_src->u8), NULL);
       
   }
 #endif

@@ -348,8 +348,8 @@ int pktHasMeshHeader(uint8_t* ptr_to_packet);
  * or if the packet has not the Mesh Header.
  */
 uint8_t parseMeshHeader(uint8_t* ptr_to_packet, uint8_t* hopLimit, 
-        linkaddr_t* finalAddr, uint8_t* finalAddrDim, 
-        linkaddr_t* origAddr, uint8_t* origAddrDim);
+        uint8_t* finalAddr, uint8_t* finalAddrDim, 
+        uint8_t* origAddr, uint8_t* origAddrDim);
 
 
 void extractIidFromIpAddr(linkaddr_t* llAddr, uip_ip6addr_t* ipAddr, uint8_t* addrDim);
