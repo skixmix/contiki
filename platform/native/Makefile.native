@@ -26,6 +26,15 @@ CONTIKI_TARGET_SOURCEFILES += tapdev6.c
 endif
 endif
 
+ifeq ($(CONTIKI_WITH_SDN),1)
+    CFLAGS += -DNETSTACK_CONF_SDN=1
+    MODULES += core/net/sdn
+    MODULES += apps/er-coap
+    MODULES += apps/rest-engine
+else
+    CFLAGS += -DNETSTACK_CONF_SDN=0
+endif
+
 CONTIKI_SOURCEFILES += $(CTK) ctk-conio.c $(CONTIKI_TARGET_SOURCEFILES)
 
 .SUFFIXES:
