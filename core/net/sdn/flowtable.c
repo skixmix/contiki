@@ -8,7 +8,7 @@
 
 #include "flowtable.h"
 
-#define SDN_STATS 1
+#define SDN_STATS 0
 #if SDN_STATS
 #include <stdio.h>
 #define PRINT_STAT(...) printf(__VA_ARGS__)
@@ -18,7 +18,7 @@
 #define PRINT_STAT_LLADDR(addr)
 #endif
 
-#define DEBUG 0
+#define DEBUG 1
 #if DEBUG && (!SINK || DEBUG_SINK)
 #include <stdio.h>
 #define PRINTF(...) printf(__VA_ARGS__)
@@ -314,6 +314,7 @@ uint8_t add_entry_to_ft(entry_t* entry){
 }
 
 void print_action(action_t* a){
+#if DEBUG
     switch(a->type){
         case FORWARD: PRINTF("FORWARD "); break;
         case DROP: PRINTF("DROP "); break;
@@ -362,10 +363,11 @@ void print_action(action_t* a){
         for(i = 0; i < dim; i++)
             PRINTF("%02x", a->value.bytes[i]);
     }
+#endif
 }
 
 void print_rule(rule_t* r){
-    
+#if DEBUG
     switch(r->field){
         case LINK_SRC_ADDR: PRINTF("LINK_SRC_ADDR "); break;
         case LINK_DST_ADDR: PRINTF("LINK_DST_ADDR "); break;
@@ -410,9 +412,11 @@ void print_rule(rule_t* r){
     }
     PRINTF(" OFFSET: %u ", r->offset);
     PRINTF("SIZE: %u ", r->size);
+#endif
 }
 
 void print_entry(entry_t* e) {
+#if DEBUG
     rule_t *r;
     action_t *a;
     PRINTF("Priority %u: IF (", e->priority);
@@ -426,9 +430,11 @@ void print_entry(entry_t* e) {
         PRINTF(";");
     } 
     PRINTF("}[%d %d]", e->stats.ttl, e->stats.count);   
+#endif
 }
 
 void print_flowtable() {
+#if DEBUG
     entry_t *e;
     int i;
     uint8_t dim;
@@ -442,6 +448,7 @@ void print_flowtable() {
         print_entry(e);
         PRINTF("\n");  
     }
+#endif
 }
 
 entry_t* getFlowTableHead(){
@@ -502,7 +509,6 @@ entry_t* find_entry(entry_t* entry_to_match){
     action_t* action_to_match = NULL;
     action_t* action_list = NULL;
     int num_rules;
-    int num_actions;
     
     if(entry_to_match == NULL)
         return NULL;
@@ -510,7 +516,6 @@ entry_t* find_entry(entry_t* entry_to_match){
     rule_list = list_head(entry_to_match->rules);
     num_rules = list_length(entry_to_match->rules);
     action_list = list_head(entry_to_match->actions);
-    num_actions = list_length(entry_to_match->actions);
     
     //Search the entry with the same rules as the parameter
     for(entry = list_head(flowtable); entry != NULL; entry = entry->next){
@@ -701,7 +706,7 @@ void flowtable_test(){
     uint8_t addr_udpServer[8]  = {0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02};
     uint8_t addr_1[8]  = {0x00, 0x01, 0x00, 0x01, 0x00, 0x01, 0x00, 0x01};
     //uint8_t addr_1[8]  = {0x00, 0x12, 0x74, 0x00, 0x16, 0xc0, 0x77, 0xed};
-    //uint8_t addr_1[8]  = {0x00, 0x12, 0x74, 0x00, 0x10, 0x20, 0x29, 0x1a};
+    //uint8_t addr_1[8]  = {0xc1, 0x0c, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01};
     rule_t* rule;
     action_t* action;
     entry_t* entry;
@@ -710,18 +715,18 @@ void flowtable_test(){
         
         entry = create_entry(1);
         rule = create_rule(MH_DST_ADDR, 0, 64, EQUAL, addr_udpServer);
-        action= create_action(TO_UPPER_L, NO_FIELD, 0, 64, NULL);
+        action= create_action(TO_UPPER_L, NO_FIELD, 0, 0, NULL);
         add_rule_to_entry(entry, rule);    
         add_action_to_entry(entry, action);
         add_entry_to_ft(entry);
-        /*
+        
         entry = create_entry(1);
-        rule = create_rule(MH_DST_ADDR, 0, 64, EQUAL, addr_4);
-        action= create_action(FORWARD, NO_FIELD, 0, 64, addr_2);
+        rule = create_rule(MH_DST_ADDR, 0, 64, EQUAL, addr_tunslip);
+        action= create_action(TO_UPPER_L, NO_FIELD, 0, 0, NULL);
         add_rule_to_entry(entry, rule);    
         add_action_to_entry(entry, action);
         add_entry_to_ft(entry);
-        */
+        
     }
     
     if(memcmp(&linkaddr_node_addr, addr_1, 8) != 0){                            //For every node except the root
