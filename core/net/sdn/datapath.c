@@ -29,8 +29,8 @@
 /*--------------Constants---------------*/
 #define MESH_ORIGINATOR_ADDR        1 
 #define MESH_FINAL_ADDR             9
-#define MESH_V_FLAG                 4
-#define MESH_F_FLAG                 5
+#define MESH_V_FLAG                 5
+#define MESH_F_FLAG                 4
 
 
 uint8_t status_register[STATUS_REGISTER_SIZE];
@@ -53,11 +53,11 @@ uint8_t getFieldFromPacket(field_t field, uint8_t* copy_buffer, uint8_t* buf_occ
             *buf_occupation = LINKADDR_SIZE;
             return 1;
         case MH_SRC_ADDR:
-            if(parseMeshHeader(ptr_to_packet, NULL, NULL, NULL, (linkaddr_t*)copy_buffer, buf_occupation) > 0)
+            if(parseMeshHeader(ptr_to_packet, NULL, NULL, NULL, copy_buffer, buf_occupation) > 0)
                 return 1;
             break;
         case MH_DST_ADDR: 
-            if(parseMeshHeader(ptr_to_packet, NULL, (linkaddr_t*)copy_buffer, buf_occupation, NULL, NULL) > 0)
+            if(parseMeshHeader(ptr_to_packet, NULL, copy_buffer, buf_occupation, NULL, NULL) > 0)
                 return 1;
             break;
         case MH_HL:  
@@ -74,12 +74,12 @@ uint8_t* getFieldPtr(field_t field, uint8_t* dim){
     switch(field){
         case LINK_SRC_ADDR: 
             if(dim != NULL)
-                dim = LINKADDR_SIZE;
-            return packetbuf_addr(PACKETBUF_ADDR_SENDER);
+                *dim = LINKADDR_SIZE;
+            return (uint8_t*)packetbuf_addr(PACKETBUF_ADDR_SENDER);
         case LINK_DST_ADDR: 
             if(dim != NULL)
-                dim = LINKADDR_SIZE;
-            return packetbuf_addr(PACKETBUF_ADDR_RECEIVER);
+                *dim = LINKADDR_SIZE;
+            return (uint8_t*)packetbuf_addr(PACKETBUF_ADDR_RECEIVER);
         case MH_SRC_ADDR:
             if(pktHasMeshHeader(ptr_to_packet)){
                 if(!BIT_IS_SET(*ptr_to_packet, MESH_V_FLAG))
@@ -100,7 +100,7 @@ uint8_t* getFieldPtr(field_t field, uint8_t* dim){
             break;
         case NODE_STATE: 
             if(dim != NULL)
-                dim = STATUS_REGISTER_SIZE;
+                *dim = STATUS_REGISTER_SIZE;
             return status_register;
     }
     return 0;
@@ -231,6 +231,13 @@ uint8_t evaluateRule(rule_t* rule){
             PRINTF("Datapath - evaluateRule: the field is not present\n");
             return 0;
         }
+/*
+        PRINTF("BUFFER = ");
+        int i; 
+        for(i = 0; i < buf_occupation; i++)
+            PRINTF("%02x", copy_buffer[i]);
+        PRINTF("\n");
+*/
         //Apply the bits mask as specified by the size and offset fields
         res = applyMask(rule->size, rule->offset, copy_buffer, buf_occupation);
         if(res != 1){
@@ -239,11 +246,14 @@ uint8_t evaluateRule(rule_t* rule){
         }
     }
     
+/*
+    PRINTF("BUFFER = ");
+    int i; 
+    for(i = 0; i < buf_occupation; i++)
+        PRINTF("%02x", copy_buffer[i]);
+    PRINTF("\n");
+*/
     
-    //DEBUG
-    //PRINTLLADDR(copy_buffer);
-    //PRINTF("\n");
-    //DEBUG
     
     //Carry out the actual comparison
     if(dim == 1)        //If the bits window is equal or less than a byte
@@ -419,7 +429,7 @@ int matchPacket(){
     action_t* action;
     uint8_t result;
     uint8_t continue_flag;
-    linkaddr_t* L2_sender, *L2_receiver;
+    const linkaddr_t* L2_sender, *L2_receiver;
     
     ptr_to_packet = packetbuf_dataptr();
     L2_sender = packetbuf_addr(PACKETBUF_ADDR_SENDER);
@@ -449,6 +459,8 @@ int matchPacket(){
             //TODO: the packet could have been modified, we need a copy of the buffer
             if(action->type == CONTINUE)
                 continue_flag = 1;
+            if(action->type == DROP)
+                break;
         }
         updateStat(&entry->stats);
         //Unless there was a "continue" action, stop scanning the flow table 
