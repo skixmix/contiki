@@ -15,7 +15,7 @@
 #include "net/sdn/datapath.h"
 #include "net/link-stats.h"
 
-#define SDN_STATS 1
+#define SDN_STATS 0
 #if SDN_STATS
 #include <stdio.h>
 #define PRINT_STAT(...) printf(__VA_ARGS__)
@@ -29,7 +29,7 @@
 #endif
 
 
-#define DEBUG 0
+#define DEBUG 1
 #if DEBUG
 #include <stdio.h>
 #define PRINTF(...) printf(__VA_ARGS__)
@@ -118,12 +118,13 @@ int ipAddrListContains(uip_ipaddr_t* ipAddr){
 
 
 int forward(){
-    //DEBUG
-    linkaddr_t* dest;
+#if DEBUG   
+    const linkaddr_t* dest;
     dest = packetbuf_addr(PACKETBUF_ADDR_RECEIVER);
     PRINTF("SDN: Packet is being sent to: ");
     PRINTLLADDR(dest);
     PRINTF("\n");
+#endif
     /*------------------------STAT---------------------------*/
 #if SDN_STATS
     if(pktHasMeshHeader(packetbuf_dataptr()) == 1){
@@ -156,20 +157,22 @@ int toUpperLayer(){
 static void
 input(void)
 {
-    linkaddr_t* source;
     linkaddr_t finalAddr;
     uint8_t finalAddrDim;
     uip_ipaddr_t ipAddr;
     int res;
     uint8_t* ptr = packetbuf_dataptr();
-    sent_callback == NULL;
+    sent_callback = NULL;
     ptr_copy = NULL;
     linkaddr_copy(&meshAddrList[0], &linkaddr_node_addr);       //Because of the native code takes few seconds to set the MAC address from the slip-radio program which runs onto the real node 
     /*-------------------------------DEBUG--------------------------------*/
+#if DEBUG
+    const linkaddr_t* source;
     PRINTF("SDN: Packet received from: ");
     source = packetbuf_addr(PACKETBUF_ADDR_SENDER);
     PRINTLLADDR(source);
     PRINTF("\n");
+#endif
     /*-------------------------------STAT----------------------------------*/
 #if SDN_STATS
     if(pktHasMeshHeader(ptr) == 1){
@@ -197,17 +200,20 @@ input(void)
         linkaddr_t origAddr;
         uint8_t origAddrDim;
         uint8_t hopLimit;
-        parseMeshHeader(ptr, &hopLimit, &finalAddr, &finalAddrDim, &origAddr, &origAddrDim);
+        parseMeshHeader(ptr, &hopLimit, &(finalAddr.u8), &finalAddrDim, &(origAddr.u8), &origAddrDim);
         PRINTF("Mesh: Hop Limit: %u", hopLimit);
         PRINTF(" Dim = %u Final Address: ", finalAddrDim);
-        PRINTLLADDR(&finalAddr);
+        if(finalAddrDim == 8)
+            PRINTLLADDR(&finalAddr);
+        else
+            printf("[%02x:%02x]", finalAddr.u8[0], finalAddr.u8[1]);
         PRINTF(" Dim = %u Orig. Address: ", origAddrDim);
         PRINTLLADDR(&origAddr);
         PRINTF("\n");
         //DEBUG
                 
         //Read the Final Address from the Mesh Header
-        parseMeshHeader(ptr, NULL, &finalAddr, &finalAddrDim, NULL, NULL);
+        parseMeshHeader(ptr, NULL, &(finalAddr.u8), &finalAddrDim, NULL, NULL);
         
         //Check if it is a mesh multicast address
         if(meshAddrIsMulticast(&finalAddr, finalAddrDim) == 1){
@@ -236,17 +242,6 @@ input(void)
             else{
                 //Otherwise it must be handled by the Flow Table
                 matchPacket();
-                /*
-                const linkaddr_t fixed = {0xc1, 0x0c, 0x00, 0x00, 0x00, 0x00, 0x00, 0x03};
-                const linkaddr_t new_dest = {0xc1, 0x0c, 0x00, 0x00, 0x00, 0x00, 0x00, 0x04};
-                if(linkaddr_cmp(&fixed, nodeMAC) != 0){
-                    packetbuf_set_addr(PACKETBUF_ADDR_RECEIVER, &new_dest);
-                    PRINTF("Set the Next Hop Addr = ");
-                    PRINTLLADDR(&new_dest);
-                    PRINTF("\n");
-                }
-                NETSTACK_LLSEC.send(NULL, NULL);
-                */
             }
         }
     }
@@ -319,34 +314,36 @@ input(void)
 static void
 send(mac_callback_t sent, void *ptr)
 {
-    linkaddr_t finalAddr;
-    uint8_t finalAddrDim;
-    linkaddr_t origAddr;
-    uint8_t origAddrDim;
-    linkaddr_t* source;
-    linkaddr_t* dest;
-    uint8_t hopLimit;
-    uint8_t* ptr_to_pkt = packetbuf_dataptr();
     uip_ipaddr_t ipAddr;
     int res = 0;
     
     sent_callback = sent;
     ptr_copy = ptr;
-    //DEBUG
+#if DEBUG
+    uint8_t* ptr_to_pkt = packetbuf_dataptr();
+    linkaddr_t* dest;
+    uint8_t hopLimit;
+    linkaddr_t finalAddr;
+    uint8_t finalAddrDim;
+    linkaddr_t origAddr;
+    uint8_t origAddrDim;
     dest = packetbuf_addr(PACKETBUF_ADDR_RECEIVER);
     PRINTF("SDN: Packet is being sent to: ");
     PRINTLLADDR(dest);
     PRINTF("\n");
     if(pktHasMeshHeader(ptr_to_pkt)){
-        parseMeshHeader(ptr_to_pkt, &hopLimit, &finalAddr, &finalAddrDim, &origAddr, &origAddrDim);
+        parseMeshHeader(ptr_to_pkt, &hopLimit, &(finalAddr.u8), &finalAddrDim, &(origAddr.u8), &origAddrDim);
         PRINTF("Mesh: Hop Limit: %u", hopLimit);
         PRINTF(" Dim = %u Final Address: ", finalAddrDim);
-        PRINTLLADDR(&finalAddr);
+        if(finalAddrDim == 8)
+            PRINTLLADDR(&finalAddr);
+        else
+            printf("[%02x:%02x]", finalAddr.u8[0], finalAddr.u8[1]);
         PRINTF(" Dim = %u Orig. Address: ", origAddrDim);
         PRINTLLADDR(&origAddr);
         PRINTF("\n");
     }
-    //DEBUG
+#endif
     
     /*------------------------------Logic------------------------------*/
         
