@@ -26,7 +26,7 @@
 //#include "dev/battery-sensor.h"
 
 #define TTL_INTERVAL		(1 * CLOCK_SECOND)
-#define TOP_UPDATE_PERIOD       (30 * 60 * CLOCK_SECOND)
+#define TOP_UPDATE_PERIOD       (5 * 60 * CLOCK_SECOND)
 #define MAX_DIM_PAYLOAD         8 + (16 * NBR_TABLE_CONF_MAX_NEIGHBORS)               
 #define MAX_REQUEST             4       //Must be a power of two
 

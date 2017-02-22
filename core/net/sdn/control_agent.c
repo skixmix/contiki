@@ -7,7 +7,10 @@
 
 #include "net/sdn/control_agent.h"
 
-#define SDN_STATS 1
+#define uip_create_linklocal_mcast(addr)	\
+  uip_ip6addr((addr), 0xff0e, 0, 0, 0, 0, 0, 0, 0x0005)
+
+#define SDN_STATS 0
 #if SDN_STATS
 #include <stdio.h>
 #define PRINT_STAT(...) printf(__VA_ARGS__)
@@ -295,8 +298,7 @@ void remove_pending_req(linkaddr_t* mesh_destination){
             if(pending_array[i].payload != NULL)
                 queuebuf_free(pending_array[i].payload);
             break;
-        }
-        
+        }        
     }
 }
 
@@ -311,7 +313,7 @@ void handleTableMiss(linkaddr_t* L2_receiver, linkaddr_t* L2_sender, uint8_t* pt
     q = queuebuf_new_from_packetbuf();
     if(q == NULL)
         return;
-    if(parseMeshHeader(ptr_to_pkt, NULL, &mesh_destination, NULL, NULL, NULL) > 0){
+    if(parseMeshHeader(ptr_to_pkt, NULL, &(mesh_destination.u8), NULL, NULL, NULL) > 0){
         pending_index = add_pending_request(&mesh_destination);
         if(pending_index == -1){
             queuebuf_free(q);
@@ -466,6 +468,10 @@ void control_agent_init(){
     SERVER_NODE(&server_ipaddr);
     ringbufindex_init(&requests_ringbuf, MAX_REQUEST);
     process_start(&coap_client_process, NULL);
+    //TEST: to be removed
+    uip_ipaddr_t maddr;
+    uip_create_linklocal_mcast(&maddr);
+    uip_ds6_maddr_add(&maddr);
 }
 
 
@@ -476,7 +482,7 @@ void parse_table_miss_response(const uint8_t* chunk, int len){
     linkaddr_t* mesh_destination;
     if(chunk == NULL || len == 0)
         return;
-    cb = cn_cbor_decode(chunk, len, &err);
+    cb = cn_cbor_decode((const char*)chunk, len, &err);
     if(cb == NULL){
         PRINTF("Control Agent: parsing Cbor payload has failed:");
         PRINTF(" Err %u pos %i\n", err.err, err.pos);
@@ -503,7 +509,7 @@ void parse_table_miss_response(const uint8_t* chunk, int len){
 
 void client_table_miss_handler(void *response){
     const uint8_t *chunk;
-    int i, len;
+    int len;
     
     if(response == NULL)
         return;
@@ -511,6 +517,7 @@ void client_table_miss_handler(void *response){
     if(len == 0)
         return;
 #if DEBUG == 1
+    int i;
     printf("Table miss: ");
     for (i = 0; i < len; i++)
     {
@@ -531,11 +538,65 @@ void client_topology_update_handler(void *response){
   PRINTF("Topology update: %.*s", len, (char *)chunk);
 }
 
+void put_handler(void* request, void* response, uint8_t *buffer, uint16_t preferred_size, int32_t *offset){    
+  uint8_t *incoming = NULL;
+  size_t len = 0;  
+  const cn_cbor *cb;
+  cn_cbor_errback err;
+  cn_cbor* cp;
+  linkaddr_t* mesh_destination;
+  if((len = REST.get_request_payload(request, (const uint8_t **)&incoming))){
+      
+#if DEBUG == 1
+    int i;
+    printf("Received payload: ");
+    for (i = 0; i < len; i++)
+    {
+      printf("%02x", incoming[i]);
+    }
+    printf("\n");
+#endif
+      
+    cb = cn_cbor_decode((const char*)incoming, len, &err);
+    if(cb == NULL){
+        PRINTF("Control Agent: parsing Cbor payload has failed:");
+        PRINTF(" Err %u pos %i\n", err.err, err.pos);
+        REST.set_response_status(response, REST.status.BAD_REQUEST);
+        return;
+    }
+    if(cb->type == CN_CBOR_ARRAY){
+        for (cp = cb->first_child; cp; cp = cp->next) {
+            mesh_destination = (linkaddr_t*)install_flow_entry_from_cbor(cp);
+            if(mesh_destination == NULL){
+                PRINTF("Control Agent: inserting new flow entries has failed\n");
+                REST.set_response_status(response, REST.status.BAD_REQUEST);
+                break;
+            }
+            else{
+                remove_pending_req(mesh_destination);
+            }
+        }          
+    }
+    else{
+        PRINTF("Control Agent: wrong structure of Cbor response\n");
+        REST.set_response_status(response, REST.status.BAD_REQUEST);
+    }
+    cn_cbor_free(cb);
+    REST.set_response_status(response, REST.status.CREATED);
+  }
+  else
+      REST.set_response_status(response, REST.status.BAD_REQUEST);  
+}
+
+RESOURCE(resource_flow_table, "title=\"Resource\";rt=\"Text\"", NULL, NULL, put_handler, NULL);
+
 PROCESS_THREAD(coap_client_process, ev, data){
     PROCESS_BEGIN();
     request_t* req;
     /* receives all CoAP messages */
-    coap_init_engine();
+    //coap_init_engine();
+    rest_init_engine();
+    rest_activate_resource(&resource_flow_table, "local_control_agent/flow_table");
     while(1) {
         PROCESS_YIELD_UNTIL(ev == PROCESS_EVENT_POLL);
         while((req = get_ref_to_next_request()) != NULL){
