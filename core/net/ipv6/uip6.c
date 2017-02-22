@@ -1195,12 +1195,15 @@ uip_process(uint8_t flag)
    * expect UIP_BUF to be unmodified
    */
 #if UIP_IPV6_MULTICAST
+  PRINTF("uip_process: Checkpoint multicast\n");
   if(uip_is_addr_mcast_routable(&UIP_IP_BUF->destipaddr)) {
     if(UIP_MCAST6.in() == UIP_MCAST6_ACCEPT) {
       /* Deliver up the stack */
+        PRINTF("uip_process: Process multicast packet\n");
       goto process;
     } else {
       /* Don't deliver up the stack */
+        PRINTF("uip_process: Drop multicast packet\n");
       goto drop;
     }
   }
