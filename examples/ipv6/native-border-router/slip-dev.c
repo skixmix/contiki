@@ -320,7 +320,7 @@ slip_flushbuf(int fd)
   }
 
   n = write(fd, slip_buf + slip_begin, slip_packet_end - slip_begin);
-
+  
   if(n == -1 && errno != EAGAIN) {
     err(1, "slip_flushbuf write failed");
   } else if(n == -1) {

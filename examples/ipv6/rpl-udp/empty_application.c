@@ -33,7 +33,9 @@
 #include "net/ip/uip-udp-packet.h"
 #include <stdio.h>
 #include <string.h>
+#if NETSTACK_CONF_SDN == 1
 #include "net/sdn/control_agent.h"
+#endif
 
 
 #define DEBUG DEBUG_NONE
@@ -92,9 +94,12 @@ PROCESS_THREAD(udp_client_process, ev, data)
   
   set_global_address();
 #if NETSTACK_CONF_SDN == 1
-  control_agent_init();
+  //I've tried to put this function call into the sdn module initialization function
+  //which is called by the netstack module at startup time.
+  //But it seems to not work correctly, the coap engine sends bad formatted request to the server
+  //for instance with no source Coap port
+  control_agent_init();         
 #endif
-
   PRINTF("UDP client process started nbr:%d routes:%d\n",
          NBR_TABLE_CONF_MAX_NEIGHBORS, UIP_CONF_MAX_ROUTES);
 

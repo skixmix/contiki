@@ -393,7 +393,9 @@ PT_THREAD(coap_blocking_request
                                                   remote_port))) {
       state->transaction->callback = coap_blocking_request_callback;
       state->transaction->callback_data = state;
-
+     /* if(coap_get_header_block1(request, state->block_num, NULL, NULL)){
+          
+      }*/
       if(state->block_num > 0) {
         coap_set_header_block2(request, state->block_num, 0,
                                REST_MAX_CHUNK_SIZE);

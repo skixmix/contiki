@@ -107,11 +107,14 @@ slip_radio_cmd_handler(const uint8_t *data, int len)
       packet_ids[packet_pos] = data[2];
 
       packetbuf_clear();
+#if SERIALIZE_ATTRIBUTES
       pos = packetutils_deserialize_atts(&data[3], len - 3);
       if(pos < 0) {
         PRINTF("slip-radio: illegal packet attributes\n");
         return 1;
       }
+#endif
+      
       pos += 3;
       len -= pos;
       if(len > PACKETBUF_SIZE) {

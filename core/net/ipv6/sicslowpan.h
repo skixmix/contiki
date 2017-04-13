@@ -321,6 +321,7 @@ struct sicslowpan_nh_compressor {
 
 };
 
+int readIPSrcAddress(uip_ipaddr_t* srcAddr);                                    //Temporary solution for Network Slicing experiment
 /**
  * Function which extracts the IPv6 destination address from the 6LoWPAN packet.
  * It takes care of possible header compression.

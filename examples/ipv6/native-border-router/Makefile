@@ -20,6 +20,7 @@ APPS += $(WITH_WEBSERVER)
 CFLAGS += -DWEBSERVER=2
 endif
 
+CONTIKI_WITH_SDN = 1
 CONTIKI_WITH_IPV6 = 1
 include $(CONTIKI)/Makefile.include
 

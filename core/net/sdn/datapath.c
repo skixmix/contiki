@@ -33,12 +33,55 @@
 #define MESH_F_FLAG                 4
 
 
-uint8_t status_register[STATUS_REGISTER_SIZE];
+uint8_t state_register[STATUS_REGISTER_SIZE];
 uint8_t* ptr_to_packet;
+static struct ctimer broadcast_timer;
+static struct ringbufindex broadcast_ringbuf;
+static broadcast_pkt_t requests_array[MAX_BROADCAST_PKTS];
+static uint8_t timer_setted;
 
-uint8_t* getStatusRegisterPtr(uint8_t* dim){
+void datapath_init(){
+    timer_setted = 0;
+    ringbufindex_init(&broadcast_ringbuf, MAX_BROADCAST_PKTS);
+    int i;
+    for(i = 0; i < MAX_BROADCAST_PKTS; i++){
+        requests_array[i].broadcast_packet = NULL;        
+    }
+}
+
+broadcast_pkt_t* add_broadcast_packet(void){
+  int index = ringbufindex_peek_put(&broadcast_ringbuf);
+  //printf("RINGBUF_ADD = %i\n", index);
+  if(index != -1){
+      ringbufindex_put(&broadcast_ringbuf);
+      return &requests_array[index];
+  }
+  return NULL;
+}
+
+broadcast_pkt_t* get_ref_to_next_broadcast(void){
+  int index = ringbufindex_peek_get(&broadcast_ringbuf);
+  //printf("RINGBUF_GET = %i\n", index);
+  if(index != -1){
+      //ringbufindex_get(&requests_ringbuf);
+      return &requests_array[index];
+  }
+  return NULL;
+}
+
+broadcast_pkt_t* advance_ring_buf_broadcast(){
+    int index = ringbufindex_get(&broadcast_ringbuf);
+    //printf("RINGBUF_ADV = %i\n", index);
+    if(index != -1){
+      //ringbufindex_get(&requests_ringbuf);
+      return &requests_array[index];
+    }
+    return NULL;
+}
+
+uint8_t* getStateRegisterPtr(uint8_t* dim){
     *dim = STATUS_REGISTER_SIZE;
-    return status_register;
+    return state_register;
 }
 
 //Copy the value of a field from the packet into the copy_buffer
@@ -59,6 +102,12 @@ uint8_t getFieldFromPacket(field_t field, uint8_t* copy_buffer, uint8_t* buf_occ
         case MH_DST_ADDR: 
             if(parseMeshHeader(ptr_to_packet, NULL, copy_buffer, buf_occupation, NULL, NULL) > 0)
                 return 1;
+            break;
+        case IP_SRC_ADDR:
+            if(readIPSrcAddress(copy_buffer) > 0){                              //Temporary solution for Network Slicing experiment
+                *buf_occupation = sizeof(uip_ipaddr_t);                         
+                return 1;
+            }
             break;
         case MH_HL:  
             break;
@@ -101,7 +150,7 @@ uint8_t* getFieldPtr(field_t field, uint8_t* dim){
         case NODE_STATE: 
             if(dim != NULL)
                 *dim = STATUS_REGISTER_SIZE;
-            return status_register;
+            return state_register;
     }
     return 0;
 }
@@ -158,7 +207,7 @@ uint8_t applyMask(uint8_t size, uint8_t offset, uint8_t* copy_buffer, uint8_t bu
             copy_buffer[first_byte] &= mask;
             //Since the bits windows is not aligned we move it at the least significant 
             //position inside the byte
-            copy_buffer[first_byte] >>= (8 - (offset + size) % 8);
+            //copy_buffer[first_byte] >>= (8 - (offset + size) % 8);
         }
     }
     //Otherwise the bits window is greater than 1 byte
@@ -213,7 +262,7 @@ uint8_t evaluateRule(rule_t* rule){
         buf_occupation = COPY_BUFFER_SIZE;
         //Copy the part of the status register that contains the
         //entire bits window into the copy_buffer
-        memcpy(copy_buffer, status_register + first_byte, buf_occupation);
+        memcpy(copy_buffer, state_register + first_byte, buf_occupation);
         //Apply the mask provided by the size and offset fields
         //but scale the offset to address correctly the copy_buffer, since the 
         //bits window is stored from the first byte of the copy_buffer
@@ -246,18 +295,20 @@ uint8_t evaluateRule(rule_t* rule){
         }
     }
     
-/*
+    /*
     PRINTF("BUFFER = ");
-    int i; 
-    for(i = 0; i < buf_occupation; i++)
-        PRINTF("%02x", copy_buffer[i]);
+    int j; 
+    for(j = 0; j < dim; j++)
+        PRINTF("%02x", copy_buffer[j]);
     PRINTF("\n");
-*/
+    */
     
     
     //Carry out the actual comparison
-    if(dim == 1)        //If the bits window is equal or less than a byte
+    if(dim == 1){        //If the bits window is equal or less than a byte
         res = memcmp(copy_buffer, &rule->value.byte, dim);
+        //printf("\nBuffer: %02x == %02x\n", copy_buffer[0], rule->value.byte);
+    }
     else                //Or if it is greater than 1 byte
         res = memcmp(copy_buffer, rule->value.bytes, dim);
     //Apply the operator and see if the result fits the condition
@@ -297,7 +348,7 @@ void updateStat(stats_t* stat){
 }
 
 //Function that implements the forward type of action
-uint8_t forward_action(action_t* action){
+uint8_t forwardAction(action_t* action){
     if(action == NULL || action->size != 64 || action->value.bytes == NULL)
         return 0;
         
@@ -310,6 +361,47 @@ uint8_t forward_action(action_t* action){
     packetbuf_set_addr(PACKETBUF_ADDR_RECEIVER, (const linkaddr_t*)action->value.bytes);
     //Pass the control to the SDN module
     forward();
+    return 1;
+}
+
+static void broadcastSendPackets(void *ptr){
+    broadcast_pkt_t* req;
+    while((req = get_ref_to_next_broadcast()) != NULL){
+        queuebuf_to_packetbuf(req->broadcast_packet);        
+        PRINTF("Datapath: Forward packet in broadcast\n");
+        forward(); 
+        advance_ring_buf_broadcast();
+        queuebuf_free(req->broadcast_packet);
+    }
+    timer_setted = 0;
+}
+
+uint8_t forward_broadcast(){  
+    clock_time_t delay;
+    unsigned short min = 10;
+    unsigned short max = 100;
+    unsigned short randomNum = 0;
+    broadcast_pkt_t* req;
+        
+    //Set the next hop mac address
+    packetbuf_set_addr(PACKETBUF_ADDR_SENDER, &linkaddr_node_addr);
+    packetbuf_set_addr(PACKETBUF_ADDR_RECEIVER, &linkaddr_null);
+    
+    PRINTF("Datapath: Queue buf size: %d\n", queuebuf_numfree());
+    
+    req = add_broadcast_packet();
+    if(req != NULL){
+        PRINTF("Datapath: Queue broadcast packet\n");
+        req->broadcast_packet = queuebuf_new_from_packetbuf();
+            randomNum = (random_rand() % max) + min;
+            delay = (CLOCK_SECOND / 100) * randomNum;
+            PRINTF("Datapath: broadcast packet delayed for %d millisec\n", delay);
+            ctimer_set(&broadcast_timer, delay, broadcastSendPackets, NULL);
+    }
+    else{
+        PRINTF("Datapath: could not temporary store broadcast packet\n");
+        return 0;
+    }
     return 1;
 }
 
@@ -341,11 +433,12 @@ uint8_t write_field(uint8_t* field, uint8_t fieldDim, uint8_t* value, uint8_t si
     
     //If the window size is equal or less than a byte
     if(size <= 8){
+        uint8_t shift_left = (offset + size % 8) == 0 ? 0 :(8 - (offset + size) % 8);
         //Prepare a mask (e.g. 11100111) to set to 0 the bits that have to be overwritten  
-        mask = ~((0xff >> (offset % 8)) & (0xff << (8 - (offset + size) % 8)));
+        mask = ~((0xff >> (offset % 8)) & (0xff << shift_left));
         field[first_byte] &= mask;
         //Move the bits of the value byte at the right position and write their value into the field
-        field[first_byte] |= *value << (8 - (offset + size) % 8);
+        field[first_byte] |= *value << shift_left;
     }
     //Otherwise window size is greater than 1 byte
     else{
@@ -369,7 +462,7 @@ uint8_t write_field(uint8_t* field, uint8_t fieldDim, uint8_t* value, uint8_t si
 }
 
 //Function that implements the modify type of action
-uint8_t modify_action(action_t* action){
+uint8_t modifyAction(action_t* action){
     uint8_t* field_ptr;
     uint8_t dimField;
     uint8_t ret;
@@ -383,11 +476,11 @@ uint8_t modify_action(action_t* action){
     if(field_ptr == NULL)
         return 0;
     if(action->size <= 8)
-        ret = write_field(field_ptr, dimField, &action->value.byte, action->size, action->offset);
+        ret = write_field(field_ptr, dimField, &(action->value.byte), action->size, action->offset);
     else
         ret = write_field(field_ptr, dimField, action->value.bytes, action->size, action->offset);
     if(ret == 0)
-        PRINTF("Datapath - modify_action: failed while writing the new value");
+        PRINTF("Datapath - modify_action: failed while writing the new value");    
     return ret;
 }
 
@@ -398,7 +491,7 @@ uint8_t applyAction(action_t* action){
     
     switch(action->type){
         case FORWARD:
-            return forward_action(action);
+            return forwardAction(action);
             break;
         case DROP:
             //TODO: deallocate the packet buffer?
@@ -406,7 +499,7 @@ uint8_t applyAction(action_t* action){
             //TODO: Prevent any further action on this packet
             break;
         case MODIFY: 
-            return modify_action(action);
+            return modifyAction(action);
             break;
         case DECREMENT: 
             break;
@@ -417,13 +510,16 @@ uint8_t applyAction(action_t* action){
         case TO_UPPER_L: 
             return toUpperLayer();
             break;
+        case BROADCAST: 
+            return forward_broadcast();
+            break;
         default: 
             PRINTF("NO_ACTION ");            
     }
     return 0;
 }
 
-int matchPacket(){
+int processPacket(){
     entry_t* entry;
     rule_t* rule;
     action_t* action;
@@ -441,7 +537,6 @@ int matchPacket(){
         //DEBUG
 #if DEBUG == 1
         print_entry(entry);
-        PRINTF("\n");
 #endif        
         //Check if every condition is satisfied
         for(rule = list_head(entry->rules); rule != NULL; rule = rule->next){

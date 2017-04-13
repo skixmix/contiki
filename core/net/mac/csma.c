@@ -294,7 +294,7 @@ noack(struct rdc_buf_list *q, struct neighbor_queue *n, int num_transmissions)
 
   metadata = (struct qbuf_metadata *)q->ptr;
 
-  n->collisions = CSMA_MIN_BE;
+  n->collisions = n->collisions + 1;
   n->transmissions += num_transmissions;
 
   if(n->transmissions >= metadata->max_transmissions) {

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010, Swedish Institute of Computer Science.
+ * Copyright (c) 2006, Swedish Institute of Computer Science.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -25,54 +25,34 @@
  * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
+ *
  */
 
-#ifndef PROJECT_CONF_H_
-#define PROJECT_CONF_H_
+package org.contikios.cooja.corecomm;
+import java.io.File;
 
-#undef QUEUEBUF_CONF_NUM
-#define QUEUEBUF_CONF_NUM          4
+import org.contikios.cooja.*;
 
-#undef UIP_CONF_BUFFER_SIZE
-#define UIP_CONF_BUFFER_SIZE    180
+/**
+ * @see CoreComm
+ * @author Fredrik Osterlind
+ */
+public class Lib1 extends CoreComm {
 
-#undef UIP_CONF_ROUTER
-#define UIP_CONF_ROUTER                 0
+  /**
+   * Loads library libFile.
+   *
+   * @see CoreComm
+   * @param libFile Library file
+   */
+  public Lib1(File libFile) {
+    System.load(libFile.getAbsolutePath());
+    init();
+  }
 
-#define CMD_CONF_OUTPUT slip_radio_cmd_output
-
-/* add the cmd_handler_cc2420 + some sensors if TARGET_SKY */
-#ifdef CONTIKI_TARGET_SKY
-#define CMD_CONF_HANDLERS slip_radio_cmd_handler,cmd_handler_cc2420
-#define SLIP_RADIO_CONF_SENSORS slip_radio_sky_sensors
-/* add the cmd_handler_rf230 if TARGET_NOOLIBERRY. Other RF230 platforms can be added */
-#elif CONTIKI_TARGET_NOOLIBERRY
-#define CMD_CONF_HANDLERS slip_radio_cmd_handler,cmd_handler_rf230
-#elif CONTIKI_TARGET_ECONOTAG
-#define CMD_CONF_HANDLERS slip_radio_cmd_handler,cmd_handler_mc1322x
-#else
-#define CMD_CONF_HANDLERS slip_radio_cmd_handler
-#endif
-
-
-/* configuration for the slipradio/network driver */
-#undef NETSTACK_CONF_MAC
-#define NETSTACK_CONF_MAC     nullmac_driver
-
-#undef NETSTACK_CONF_RDC
-/* #define NETSTACK_CONF_RDC     nullrdc_noframer_driver */
-#define NETSTACK_CONF_RDC     contikimac_driver
-
-#undef NETSTACK_CONF_NETWORK
-#define NETSTACK_CONF_NETWORK slipnet_driver
-
-#undef NETSTACK_CONF_FRAMER
-#define NETSTACK_CONF_FRAMER no_framer
-
-#undef CC2420_CONF_AUTOACK
-#define CC2420_CONF_AUTOACK              1
-
-#undef UART1_CONF_RX_WITH_DMA
-#define UART1_CONF_RX_WITH_DMA           1
-
-#endif /* PROJECT_CONF_H_ */
+  public native void tick();
+  public native void init();
+  public native void setReferenceAddress(int addr);
+  public native void getMemory(int rel_addr, int length, byte[] mem);
+  public native void setMemory(int rel_addr, int length, byte[] mem);
+}

@@ -39,7 +39,7 @@
 #undef RPL_NS_CONF_LINK_NUM
 #define RPL_NS_CONF_LINK_NUM 40 /* Number of links maintained at the root */
 #undef UIP_CONF_MAX_ROUTES
-#define UIP_CONF_MAX_ROUTES 0 /* No need for routes */
+#define UIP_CONF_MAX_ROUTES 5 /* No need for routes */
 #undef RPL_CONF_MOP
 #define RPL_CONF_MOP RPL_MOP_NON_STORING /* Mode of operation*/
 #endif /* WITH_NON_STORING */
@@ -49,7 +49,7 @@
 #endif
 
 #ifndef QUEUEBUF_CONF_NUM
-#define QUEUEBUF_CONF_NUM          4
+#define QUEUEBUF_CONF_NUM          8
 #endif
 
 #ifndef UIP_CONF_BUFFER_SIZE
@@ -65,11 +65,33 @@
 #define UIP_CONF_TCP 0
 #undef SICSLOWPAN_CONF_FRAG
 #define SICSLOWPAN_CONF_FRAG 1
+#define TESTBED 1
+
+
+#undef NETSTACK_CONF_RDC
+#define NETSTACK_CONF_RDC     nullrdc_driver
+#undef NULLRDC_CONF_802154_AUTOACK
+#define NULLRDC_CONF_802154_AUTOACK       1
 
 #if NETSTACK_CONF_SDN == 1
+#include "net/ipv6/multicast/uip-mcast6-engines.h"
+#define UIP_MCAST6_CONF_ENGINE UIP_MCAST6_ENGINE_SDN
+#define SINK 1
+
+
+#undef COAP_MAX_OBSERVERS
+#define COAP_MAX_OBSERVERS             1
+/* Filtering .well-known/core per query can be disabled to save space. */
+#undef COAP_LINK_FORMAT_FILTERING
+#define COAP_LINK_FORMAT_FILTERING     1
+#undef COAP_PROXY_OPTION_PROCESSING
+#define COAP_PROXY_OPTION_PROCESSING   0
+
+/* Turn of DAO ACK to make code smaller */
+#undef RPL_CONF_WITH_DAO_ACK
+#define RPL_CONF_WITH_DAO_ACK          0
 #undef WITH_WEBSERVER
 #define WITH_WEBSERVER 0
-#define TESTBED 1
 #undef COAP_OBSERVING
 #define COAP_OBSERVING 0
 #undef COAP_BLOCK
@@ -84,24 +106,30 @@
 #define RPL_CONF_MAX_DAG_PER_INSTANCE 1
 #undef PROCESS_CONF_STATS
 #define PROCESS_CONF_STATS 0
-#undef NETSTACK_CONF_RDC
-#define NETSTACK_CONF_RDC     nullrdc_driver
-#undef NULLRDC_CONF_802154_AUTOACK
-#define NULLRDC_CONF_802154_AUTOACK       1
+
 
 #define RPL_DAO_ENABLE 0
 
-#undef UIP_CONF_MAX_ROUTES
-#define UIP_CONF_MAX_ROUTES  20
-#undef NBR_TABLE_CONF_MAX_NEIGHBORS
-#define NBR_TABLE_CONF_MAX_NEIGHBORS 15
 #define RPL_CALLBACK_PARENT_SWITCH sdn_rpl_callback_parent_switch
 #define SDN_CALLBACK_ADD_NEIGHBOR sdn_callback_neighbor
-#endif
+
+#undef UIP_CONF_MAX_ROUTES
+#define UIP_CONF_MAX_ROUTES 1 
+#undef NBR_TABLE_CONF_MAX_NEIGHBORS
+#define NBR_TABLE_CONF_MAX_NEIGHBORS 15
+
+#else       //ELSE
+
+#undef UIP_CONF_MAX_ROUTES
+#define UIP_CONF_MAX_ROUTES 40 
+#undef NBR_TABLE_CONF_MAX_NEIGHBORS
+#define NBR_TABLE_CONF_MAX_NEIGHBORS 15
+
+#endif      //ENDIF
 //ADDED
 
 #ifndef WEBSERVER_CONF_CFS_CONNS
-#define WEBSERVER_CONF_CFS_CONNS 2
+#define WEBSERVER_CONF_CFS_CONNS 0
 #endif
 
 #endif /* PROJECT_ROUTER_CONF_H_ */

@@ -72,14 +72,15 @@
 #include "net/rpl/rpl.h"
 #include <stdio.h>
 
-#define SDN_STATS 0
+#define SDN_STATS 1
 #if SDN_STATS
 #include <stdio.h>
 #define PRINT_STAT(...) printf(__VA_ARGS__)
 #define PRINT_STAT_LLADDR(addr) printf("%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x", ((uint8_t *)addr)[0], ((uint8_t *)addr)[1], ((uint8_t *)addr)[2], ((uint8_t *)addr)[3], ((uint8_t *)addr)[4], ((uint8_t *)addr)[5], ((uint8_t *)addr)[6], ((uint8_t *)addr)[7])
 #define MESH_TAG_CONTROL_HL             0x0c    
 #define MESH_TAG_DATA_HL                0x0e    
-#define MESH_TAG_RPL_HL                0x0b    
+#define MESH_TAG_RPL_HL                 0x0b  
+#define MESH_TAG_MULTICAST_HL           0x0a
 uip_ipaddr_t controller_ipaddr;
 uip_ipaddr_t udpServer_ipaddr;
 #else
@@ -660,9 +661,9 @@ void extractIidFromIpAddr(linkaddr_t* llAddr, uip_ip6addr_t* ipAddr, uint8_t* ad
     }
     else{
         //It is multicast, so map the multicast address to 16 bits
-        llAddr->u8[6] = 0x80;
-        llAddr->u8[6] |= (ipAddr->u8[14] & ((1 << 5) - 1));
-        llAddr->u8[7] = ipAddr->u8[15];
+        llAddr->u8[0] = 0x80;
+        llAddr->u8[0] |= (ipAddr->u8[14] & ((1 << 5) - 1));
+        llAddr->u8[1] = ipAddr->u8[15];
         *addrDim = 2;
     }
 }
@@ -777,6 +778,7 @@ void insertMeshHeader(){
     uint8_t meshHeaderSize = 0;
     uint8_t addrDim = 0;
     linkaddr_t finalAddress;
+    linkaddr_t originatorAddress;
     //Set the dispatch type equal to the Mesh one
     dispatch = SICSLOWPAN_DISPATCH_MESH;
     
@@ -785,7 +787,9 @@ void insertMeshHeader(){
 #if SDN_STATS
     uip_ip6addr(&controller_ipaddr, 0xfd00, 0, 0, 0, 0, 0, 0, 0x0001);
     uip_ip6addr(&udpServer_ipaddr, 0xfd00, 0, 0, 0, 0, 0, 0, 0x0002);
-    if(uip_ipaddr_cmp(&UIP_IP_BUF->destipaddr, &controller_ipaddr) == 1 || uip_ipaddr_cmp(&UIP_IP_BUF->srcipaddr, &controller_ipaddr) == 1)
+    if(uip_is_addr_mcast(&UIP_IP_BUF->destipaddr) && (uip_ipaddr_cmp(&UIP_IP_BUF->srcipaddr, &controller_ipaddr) == 1 || uip_ipaddr_cmp(&UIP_IP_BUF->srcipaddr, &udpServer_ipaddr) == 1))
+        dispatch |= MESH_TAG_MULTICAST_HL;
+    else if(uip_ipaddr_cmp(&UIP_IP_BUF->destipaddr, &controller_ipaddr) == 1 || uip_ipaddr_cmp(&UIP_IP_BUF->srcipaddr, &controller_ipaddr) == 1)
         dispatch |= MESH_TAG_CONTROL_HL;
     else if(uip_ipaddr_cmp(&UIP_IP_BUF->destipaddr, &udpServer_ipaddr) == 1 || uip_ipaddr_cmp(&UIP_IP_BUF->srcipaddr, &udpServer_ipaddr) == 1)
         dispatch |= MESH_TAG_DATA_HL; 
@@ -796,6 +800,9 @@ void insertMeshHeader(){
     //Set the Hop Limit field equal to the maximum (TODO: handle different values)
     dispatch |= MESH_DEFAULT_HL;
 #endif
+    
+    extractIidFromIpAddr(&originatorAddress, &UIP_IP_BUF->srcipaddr, &addrDim);
+    
     selectFinalDestinationAddress(&finalAddress, &addrDim);
     
     if(addrDim == 8){ //Long unicast address
@@ -809,7 +816,7 @@ void insertMeshHeader(){
         //Leave V and F set to 0 (this means that the addresses will be on 64 bits)
         
         //Copy the originator MAC address into the Mesh Header
-        memcpy(packetbuf_ptr + MESH_ORIGINATOR_ADDR, linkaddr_node_addr.u8, LINKADDR_SIZE);
+        memcpy(packetbuf_ptr + MESH_ORIGINATOR_ADDR, originatorAddress.u8, LINKADDR_SIZE);
         //Copy the final MAC address into the Mesh Header 
         memcpy(packetbuf_ptr + MESH_FINAL_ADDR, finalAddress.u8, LINKADDR_SIZE);
         
@@ -827,9 +834,9 @@ void insertMeshHeader(){
         //(it means final address on 16 bits and orig. address on 64 bits)
         SET_BIT(dispatch,MESH_F_FLAG);
         //Copy the originator MAC address into the Mesh Header
-        memcpy(packetbuf_ptr + MESH_ORIGINATOR_ADDR, linkaddr_node_addr.u8, LINKADDR_SIZE);
+        memcpy(packetbuf_ptr + MESH_ORIGINATOR_ADDR, originatorAddress.u8, LINKADDR_SIZE);
         //Copy the final MAC address into the Mesh Header 
-        memcpy(packetbuf_ptr + MESH_FINAL_ADDR, finalAddress.u8 + 6, 2);       
+        memcpy(packetbuf_ptr + MESH_FINAL_ADDR, finalAddress.u8, 2);       
     }
     //Set the dispatch type into the packet
     *(packetbuf_ptr) = dispatch;
@@ -1518,6 +1525,11 @@ uncompress_hdr_iphc(uint8_t *buf, uint16_t ip_len)
 /** @} */
 #endif /* SICSLOWPAN_COMPRESSION == SICSLOWPAN_COMPRESSION_HC06 */
 
+
+int readIPSrcAddress(uip_ipaddr_t* srcAddr){                                    //Temporary solution for Network Slicing experiment
+    memcpy(srcAddr, &UIP_IP_BUF->srcipaddr, sizeof(uip_ipaddr_t));
+    return 1;
+}
 /**
  * TODO: alleggerire il codice per andare ad estrarre SOLO l'indirizzo IP di destinazione
  * Function which extracts the IPv6 destination address from the 6LoWPAN packet.
@@ -1847,6 +1859,7 @@ send_packet(linkaddr_t *dest)
   /* Provide a callback function to receive the result of
      a packet transmission. */
 #if NETSTACK_CONF_SDN == 1
+    packetbuf_set_addr(PACKETBUF_ADDR_SENDER,(void*)&uip_lladdr);
     NETSTACK_INTERCEPTOR.send(&packet_sent, NULL);
 #else
     NETSTACK_LLSEC.send(&packet_sent, NULL);

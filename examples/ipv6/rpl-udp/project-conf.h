@@ -34,19 +34,15 @@
 #define WITH_NON_STORING 0 /* Set this to run with non-storing mode */
 #endif /* WITH_NON_STORING */
 
-#undef NBR_TABLE_CONF_MAX_NEIGHBORS
-#undef UIP_CONF_MAX_ROUTES
-
-
-/* configure number of neighbors and routes */
-#define NBR_TABLE_CONF_MAX_NEIGHBORS     15
-#define UIP_CONF_MAX_ROUTES   15
 
 #undef NETSTACK_CONF_RDC
 #define NETSTACK_CONF_RDC     nullrdc_driver
 #undef NULLRDC_CONF_802154_AUTOACK
 #define NULLRDC_CONF_802154_AUTOACK       1
 
+#ifndef UIP_CONF_BUFFER_SIZE
+#define UIP_CONF_BUFFER_SIZE    140
+#endif
 
 /* Define as minutes */
 #define RPL_CONF_DEFAULT_LIFETIME_UNIT   60
@@ -67,17 +63,38 @@
 #undef PROCESS_CONF_STATS
 #define PROCESS_CONF_STATS 0
 #ifndef QUEUEBUF_CONF_NUM
-#define QUEUEBUF_CONF_NUM          4
+#define QUEUEBUF_CONF_NUM          8
 #endif
+
+#define TESTBED 1
+
+#undef NETSTACK_CONF_RDC
+#define NETSTACK_CONF_RDC     nullrdc_driver
+#undef NULLRDC_CONF_802154_AUTOACK
+#define NULLRDC_CONF_802154_AUTOACK       1
+
 //ADDED
 #if NETSTACK_CONF_SDN == 1
-#define TESTBED 1
+#include "net/ipv6/multicast/uip-mcast6-engines.h"
+#define UIP_MCAST6_CONF_ENGINE UIP_MCAST6_ENGINE_SDN
+
+#undef COAP_MAX_OBSERVERS
+#define COAP_MAX_OBSERVERS             1
+/* Filtering .well-known/core per query can be disabled to save space. */
+#undef COAP_LINK_FORMAT_FILTERING
+#define COAP_LINK_FORMAT_FILTERING     1
+#undef COAP_PROXY_OPTION_PROCESSING
+#define COAP_PROXY_OPTION_PROCESSING   0
+
+/* Turn of DAO ACK to make code smaller */
+#undef RPL_CONF_WITH_DAO_ACK
+#define RPL_CONF_WITH_DAO_ACK          0
 #undef UIP_CONF_TCP
 #define UIP_CONF_TCP 0
 #undef COAP_OBSERVING
 #define COAP_OBSERVING 0
 #undef COAP_BLOCK
-#define COAP_BLOCK 1
+#define COAP_BLOCK 0
 #undef COAP_SEPARATE
 #define COAP_SEPARATE 0
 
@@ -85,7 +102,23 @@
 
 #define RPL_CALLBACK_PARENT_SWITCH sdn_rpl_callback_parent_switch
 #define SDN_CALLBACK_ADD_NEIGHBOR sdn_callback_neighbor
-#endif
+
+#undef NBR_TABLE_CONF_MAX_NEIGHBORS
+#undef UIP_CONF_MAX_ROUTES
+/* configure number of neighbors and routes */
+#define NBR_TABLE_CONF_MAX_NEIGHBORS     15
+#define UIP_CONF_MAX_ROUTES   1
+
+#else       //ELSE
+
+
+#undef NBR_TABLE_CONF_MAX_NEIGHBORS
+#undef UIP_CONF_MAX_ROUTES
+/* configure number of neighbors and routes */
+#define NBR_TABLE_CONF_MAX_NEIGHBORS     15
+#define UIP_CONF_MAX_ROUTES   40
+
+#endif      //ENDIf
 
 #undef SICSLOWPAN_CONF_FRAG
 #define SICSLOWPAN_CONF_FRAG 1
@@ -94,8 +127,6 @@
 #if WITH_NON_STORING
 #undef RPL_NS_CONF_LINK_NUM
 #define RPL_NS_CONF_LINK_NUM 0 /* Number of links maintained at the root. Can be set to 0 at non-root nodes. */
-#undef UIP_CONF_MAX_ROUTES
-#define UIP_CONF_MAX_ROUTES 0 /* No need for routes */
 #undef RPL_CONF_MOP
 #define RPL_CONF_MOP RPL_MOP_NON_STORING /* Mode of operation*/
 #endif /* WITH_NON_STORING */

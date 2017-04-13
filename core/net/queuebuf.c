@@ -402,7 +402,7 @@ queuebuf_free(struct queuebuf *buf)
       queuebuf_remove_from_file(buf->swap_id);
     }
 #else
-    memb_free(&buframmem, buf->ram_ptr);
+        memb_free(&buframmem, buf->ram_ptr);
 #endif
     memb_free(&bufmem, buf);
 #if QUEUEBUF_STATS

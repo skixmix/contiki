@@ -28,5 +28,7 @@ int forward();
 
 int toUpperLayer();
 
+int addMeshMulticastAddress(linkaddr_t* mesh_multicast);
+
 #endif /* SDN_H_ */
 

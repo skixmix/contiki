@@ -23,19 +23,29 @@
 /*---------------------------------------------------------------------------*/
 #define UIP_IP_BUF        ((struct uip_ip_hdr *)&uip_buf[UIP_LLH_LEN])
 /*---------------------------------------------------------------------------*/
+#ifndef SINK
+#define SINK 0
+#endif
 static uint8_t
 in()
-{
+{    
+#if SINK == 1
     UIP_IP_BUF->ttl--;
     tcpip_output(NULL);
     UIP_IP_BUF->ttl++;
-    return UIP_MCAST6_ACCEPT;
+#endif
+    
+    if(uip_ds6_maddr_lookup(&UIP_IP_BUF->destipaddr) != NULL){
+        return UIP_MCAST6_ACCEPT;
+    }
+    else
+        return UIP_MCAST6_DROP;
 }
 /*---------------------------------------------------------------------------*/
 static void
 init()
 {
-  
+    
 }
 /*---------------------------------------------------------------------------*/
 static void

@@ -59,6 +59,10 @@
 #include <limits.h>
 #include <string.h>
 
+#ifndef RPL_DAO_ENABLE
+#define RPL_DAO_ENABLE 1
+#endif
+
 #define DEBUG DEBUG_NONE
 //#define DEBUG DEBUG_PRINT
 
@@ -1091,7 +1095,11 @@ dao_output(rpl_parent_t *parent, uint8_t lifetime)
 {
   /* Destination Advertisement Object */
   uip_ipaddr_t prefix;
-
+  
+#if RPL_DAO_ENABLE == 0
+    return;
+#endif
+  
   if(get_global_addr(&prefix) == 0) {
     PRINTF("RPL: No global address set for this node - suppressing DAO\n");
     return;
@@ -1145,6 +1153,10 @@ dao_output_target_seq(rpl_parent_t *parent, uip_ipaddr_t *prefix,
 
   /* Destination Advertisement Object */
 
+#if RPL_DAO_ENABLE == 0
+    return;
+#endif
+    
   /* If we are in feather mode, we should not send any DAOs */
   if(rpl_get_mode() == RPL_MODE_FEATHER) {
     return;

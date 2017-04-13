@@ -68,7 +68,7 @@
 PROCESS(er_example_client, "Erbium Example Client");
 AUTOSTART_PROCESSES(&er_example_client);
 
-uip_ipaddr_t server_ipaddr;
+uip_ipaddr_t controller_ipaddr;
 static struct etimer et;
 
 /* Example URIs that can be queried. */
@@ -96,7 +96,7 @@ PROCESS_THREAD(er_example_client, ev, data)
 
   static coap_packet_t request[1];      /* This way the packet can be treated as pointer as usual. */
 
-  SERVER_NODE(&server_ipaddr);
+  SERVER_NODE(&controller_ipaddr);
 
   /* receives all CoAP messages */
   coap_init_engine();
@@ -122,10 +122,10 @@ PROCESS_THREAD(er_example_client, ev, data)
 
       coap_set_payload(request, (uint8_t *)msg, sizeof(msg) - 1);
 
-      PRINT6ADDR(&server_ipaddr);
+      PRINT6ADDR(&controller_ipaddr);
       PRINTF(" : %u\n", UIP_HTONS(REMOTE_PORT));
 
-      COAP_BLOCKING_REQUEST(&server_ipaddr, REMOTE_PORT, request,
+      COAP_BLOCKING_REQUEST(&controller_ipaddr, REMOTE_PORT, request,
                             client_chunk_handler);
 
       printf("\n--Done--\n");
@@ -142,10 +142,10 @@ PROCESS_THREAD(er_example_client, ev, data)
 
       printf("--Requesting %s--\n", service_urls[uri_switch]);
 
-      PRINT6ADDR(&server_ipaddr);
+      PRINT6ADDR(&controller_ipaddr);
       PRINTF(" : %u\n", UIP_HTONS(REMOTE_PORT));
 
-      COAP_BLOCKING_REQUEST(&server_ipaddr, REMOTE_PORT, request,
+      COAP_BLOCKING_REQUEST(&controller_ipaddr, REMOTE_PORT, request,
                             client_chunk_handler);
 
       printf("\n--Done--\n");

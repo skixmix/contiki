@@ -7,10 +7,8 @@
 
 #include "net/sdn/control_agent.h"
 
-#define uip_create_linklocal_mcast(addr)	\
-  uip_ip6addr((addr), 0xff0e, 0, 0, 0, 0, 0, 0, 0x0005)
 
-#define SDN_STATS 0
+#define SDN_STATS 1
 #if SDN_STATS
 #include <stdio.h>
 #define PRINT_STAT(...) printf(__VA_ARGS__)
@@ -37,8 +35,8 @@ static struct ctimer timer_ttl;
 static struct ctimer timer_topology;
 static struct ringbufindex requests_ringbuf;
 static request_t requests_array[MAX_REQUEST];
-static pending_request_t pending_array[MAX_REQUEST];
-uip_ipaddr_t server_ipaddr;
+static pending_request_t pending_requests_array[MAX_REQUEST];
+uip_ipaddr_t controller_ipaddr;
 
 #define LOCAL_PORT      UIP_HTONS(COAP_DEFAULT_PORT + 1)
 #define REMOTE_PORT     UIP_HTONS(COAP_DEFAULT_PORT)
@@ -56,6 +54,8 @@ uip_ipaddr_t server_ipaddr;
 
 static uint8_t payload[MAX_DIM_PAYLOAD];
 static char uri_query[50];
+static clock_time_t topology_update_intervals[3];
+static int topology_update_index;
 
 
 void start_request(void){
@@ -108,7 +108,7 @@ void sdn_rpl_callback_parent_switch(rpl_parent_t *old, rpl_parent_t *new){
         extractIidFromIpAddr(&llAddrParent, rpl_get_parent_ipaddr(old), &addrDim);
         extractIidFromIpAddr(&llAddrRoot, &old->dag->dag_id, &addrDim);
         
-        entry = create_entry(50);
+        entry = create_entry(70);
         if(entry == NULL)
             return;
         rule = create_rule(MH_DST_ADDR, 0, 64, EQUAL, &llAddrRoot);
@@ -144,7 +144,7 @@ void sdn_rpl_callback_parent_switch(rpl_parent_t *old, rpl_parent_t *new){
         extractIidFromIpAddr(&llAddrParent, rpl_get_parent_ipaddr(new), &addrDim);
         extractIidFromIpAddr(&llAddrRoot, &new->dag->dag_id, &addrDim);
         
-        entry = create_entry(50);
+        entry = create_entry(70);
         if(entry == NULL)
             return;
         rule = create_rule(MH_DST_ADDR, 0, 64, EQUAL, &llAddrRoot);
@@ -251,37 +251,37 @@ int add_pending_request(linkaddr_t* mesh_destination){
     int i, free_slot = -1; 
     //Clear the exipred request
     for(i = 0; i < MAX_REQUEST; i++){
-        if(pending_array[i].valid && timer_expired(&pending_array[i].lifetime_timer)){   //Valid and expired -> remove it
+        if(pending_requests_array[i].valid && timer_expired(&pending_requests_array[i].lifetime_timer)){   //Valid and expired -> remove it
             PRINTF("Request for ");
-            PRINTLLADDR(&pending_array[i].mesh_address);
+            PRINTLLADDR(&pending_requests_array[i].mesh_address);
             PRINTF(" has expired\n");
-            pending_array[i].valid = 0;
-            if(pending_array[i].payload != NULL)
-                queuebuf_free(pending_array[i].payload);
+            pending_requests_array[i].valid = 0;
+            if(pending_requests_array[i].payload != NULL)
+                queuebuf_free(pending_requests_array[i].payload);
         }
     }
     //Search for the mesh_destination in valid request slot
     for(i = 0; i < MAX_REQUEST; i++){
-        if(pending_array[i].valid && linkaddr_cmp(mesh_destination, &pending_array[i].mesh_address) != 0){   
+        if(pending_requests_array[i].valid && linkaddr_cmp(mesh_destination, &pending_requests_array[i].mesh_address) != 0){   
             //A request for mesh_destination address has already been sent
             PRINTF("There is already a request for ");
-            PRINTLLADDR(&pending_array[i].mesh_address);
+            PRINTLLADDR(&pending_requests_array[i].mesh_address);
             PRINTF("\n");
             return -1;
         }
-        if(!pending_array[i].valid)
+        if(!pending_requests_array[i].valid)
             free_slot = i;
     }
     if(free_slot == -1) //No free slot for this request
         return -1;
     //At this point it means that there's no a request with mesh_destination address
     //Thus, add it at the first free slot, set the timer and return the index
-    linkaddr_copy(&pending_array[free_slot].mesh_address, mesh_destination);
-    pending_array[free_slot].valid = 1;
-    timer_set(&pending_array[free_slot].lifetime_timer, CLOCK_SECOND * COAP_MAX_RETRANSMIT * COAP_RESPONSE_TIMEOUT);
-    pending_array[free_slot].payload = NULL;
+    linkaddr_copy(&pending_requests_array[free_slot].mesh_address, mesh_destination);
+    pending_requests_array[free_slot].valid = 1;
+    timer_set(&pending_requests_array[free_slot].lifetime_timer, CLOCK_SECOND * COAP_MAX_RETRANSMIT * COAP_RESPONSE_TIMEOUT);
+    pending_requests_array[free_slot].payload = NULL;
     PRINTF("Set pending req for %u seconds with: ", COAP_MAX_RETRANSMIT * COAP_RESPONSE_TIMEOUT);
-    PRINTLLADDR(&pending_array[free_slot].mesh_address);
+    PRINTLLADDR(&pending_requests_array[free_slot].mesh_address);
     PRINTF("\n");
     return free_slot;
 }
@@ -289,14 +289,14 @@ int add_pending_request(linkaddr_t* mesh_destination){
 void remove_pending_req(linkaddr_t* mesh_destination){
     int i;
     for(i = 0; i < MAX_REQUEST; i++){
-        if(pending_array[i].valid && linkaddr_cmp(mesh_destination, &pending_array[i].mesh_address) != 0){   
+        if(pending_requests_array[i].valid && linkaddr_cmp(mesh_destination, &pending_requests_array[i].mesh_address) != 0){   
             //A response for mesh_destination address has arrived
             PRINTF("Entry for ");
-            PRINTLLADDR(&pending_array[i].mesh_address);
+            PRINTLLADDR(&pending_requests_array[i].mesh_address);
             PRINTF(" has arrived, remove it\n");
-            pending_array[i].valid = 0;
-            if(pending_array[i].payload != NULL)
-                queuebuf_free(pending_array[i].payload);
+            pending_requests_array[i].valid = 0;
+            if(pending_requests_array[i].payload != NULL)
+                queuebuf_free(pending_requests_array[i].payload);
             break;
         }        
     }
@@ -319,12 +319,12 @@ void handleTableMiss(linkaddr_t* L2_receiver, linkaddr_t* L2_sender, uint8_t* pt
             queuebuf_free(q);
             return;
         }
-        pending_array[pending_index].payload = q;
+        pending_requests_array[pending_index].payload = q;
     }
     req = add_request();
     if(req == NULL){
         if(pending_index != -1)
-            pending_array[pending_index].valid = 0;
+            pending_requests_array[pending_index].valid = 0;
         queuebuf_free(q);
         return;
     }
@@ -425,6 +425,7 @@ uint8_t prepare_payload_top_update(){
 }
 
 static void topology_update(void *ptr){
+    unsigned short delay = CLOCK_SECOND *(random_rand() % 30);
     request_t* req = NULL;
     linkaddr_t* nodeAddr = &linkaddr_node_addr;
     uint8_t payload_dim = 0;
@@ -450,28 +451,36 @@ static void topology_update(void *ptr){
         coap_set_payload(&req->req_packet, payload, payload_dim);   
     }    
     start_request();
-    ctimer_reset(&timer_topology);
+    //ctimer_reset(&timer_topology);
+    if(topology_update_index == 0){
+        topology_update_index = 1;
+    }
+    else if(topology_update_index == 1){
+        topology_update_index = 2;
+    }
+    ctimer_set(&timer_topology, topology_update_intervals[topology_update_index] + delay, topology_update, NULL);
 }
 
 
 void control_agent_init(){
     int i; 
     unsigned short delay = CLOCK_SECOND *(random_rand() % 30);
+    topology_update_index = 0;
+    topology_update_intervals[0] = TOP_UPDATE_FIRST;
+    topology_update_intervals[1] = TOP_UPDATE_SECOND;
+    topology_update_intervals[2] = TOP_UPDATE_PERIOD;
+    
     ctimer_set(&timer_ttl, TTL_INTERVAL, callback_decrement_ttl, NULL);
-    ctimer_set(&timer_topology, TOP_UPDATE_PERIOD + delay, topology_update, NULL);
+    ctimer_set(&timer_topology, topology_update_intervals[topology_update_index] + delay, topology_update, NULL);
     flowtable_init();
     flowtable_test();
     //init pending request    
     for(i = 0; i < MAX_REQUEST; i++){
-        pending_array[i].valid = 0;
+        pending_requests_array[i].valid = 0;
     }
-    SERVER_NODE(&server_ipaddr);
+    SERVER_NODE(&controller_ipaddr);
     ringbufindex_init(&requests_ringbuf, MAX_REQUEST);
     process_start(&coap_client_process, NULL);
-    //TEST: to be removed
-    uip_ipaddr_t maddr;
-    uip_create_linklocal_mcast(&maddr);
-    uip_ds6_maddr_add(&maddr);
 }
 
 
@@ -489,7 +498,7 @@ void parse_table_miss_response(const uint8_t* chunk, int len){
         return;
     }
     if(cb->type == CN_CBOR_ARRAY){
-        for (cp = cb->first_child; cp; cp = cp->next) {
+        for (cp = cb->first_child; cp != NULL; cp = cp->next) {
             mesh_destination = (linkaddr_t*)install_flow_entry_from_cbor(cp);
             if(mesh_destination == NULL){
                 PRINTF("Control Agent: inserting new flow entries has failed\n");
@@ -538,7 +547,7 @@ void client_topology_update_handler(void *response){
   PRINTF("Topology update: %.*s", len, (char *)chunk);
 }
 
-void put_handler(void* request, void* response, uint8_t *buffer, uint16_t preferred_size, int32_t *offset){    
+void put_handler_flowtable(void* request, void* response, uint8_t *buffer, uint16_t preferred_size, int32_t *offset){    
   uint8_t *incoming = NULL;
   size_t len = 0;  
   const cn_cbor *cb;
@@ -547,15 +556,17 @@ void put_handler(void* request, void* response, uint8_t *buffer, uint16_t prefer
   linkaddr_t* mesh_destination;
   if((len = REST.get_request_payload(request, (const uint8_t **)&incoming))){
       
+    /*
 #if DEBUG == 1
     int i;
-    printf("Received payload: ");
+    printf("Received payload len %d: ", len);
     for (i = 0; i < len; i++)
     {
       printf("%02x", incoming[i]);
     }
     printf("\n");
 #endif
+    */
       
     cb = cn_cbor_decode((const char*)incoming, len, &err);
     if(cb == NULL){
@@ -567,13 +578,8 @@ void put_handler(void* request, void* response, uint8_t *buffer, uint16_t prefer
     if(cb->type == CN_CBOR_ARRAY){
         for (cp = cb->first_child; cp; cp = cp->next) {
             mesh_destination = (linkaddr_t*)install_flow_entry_from_cbor(cp);
-            if(mesh_destination == NULL){
-                PRINTF("Control Agent: inserting new flow entries has failed\n");
-                REST.set_response_status(response, REST.status.BAD_REQUEST);
-                break;
-            }
-            else{
-                remove_pending_req(mesh_destination);
+            if(mesh_destination != NULL){
+                 remove_pending_req(mesh_destination);
             }
         }          
     }
@@ -588,7 +594,56 @@ void put_handler(void* request, void* response, uint8_t *buffer, uint16_t prefer
       REST.set_response_status(response, REST.status.BAD_REQUEST);  
 }
 
-RESOURCE(resource_flow_table, "title=\"Resource\";rt=\"Text\"", NULL, NULL, put_handler, NULL);
+void post_handler(void* request, void* response, uint8_t *buffer, uint16_t preferred_size, int32_t *offset){
+    uint8_t *incoming = NULL;
+    uip_ipaddr_t multicast_addr;
+    linkaddr_t mesh_multicast_addr;
+    uint8_t addrDim;
+    int len;
+    memset(&mesh_multicast_addr, 0, sizeof(mesh_multicast_addr));
+    if((len = REST.get_request_payload(request, (const uint8_t **)&incoming)) > 0){
+        memcpy(&multicast_addr, incoming, sizeof(uip_ipaddr_t));
+        if (uip_ds6_maddr_add(&multicast_addr) != NULL){       
+            extractIidFromIpAddr(&mesh_multicast_addr, &multicast_addr, &addrDim);
+            if(addMeshMulticastAddress(&mesh_multicast_addr) == 1)               
+                REST.set_response_status(response, REST.status.CHANGED);
+            else
+                REST.set_response_status(response, REST.status.INTERNAL_SERVER_ERROR);
+#if DEBUG == 1
+            PRINTF("Received multicast addr: ");
+            PRINT6ADDR(&multicast_addr);
+            PRINTF(" -> ");
+            printf("%02x%02x\n", mesh_multicast_addr.u8[0], mesh_multicast_addr.u8[1]);
+#endif
+            
+        }
+        REST.set_response_status(response, REST.status.INTERNAL_SERVER_ERROR);
+    }
+    REST.set_response_status(response, REST.status.BAD_REQUEST);
+}
+
+/*EXPERIMENTAL PURPOSE*/
+void get_handler(void* request, void* response, uint8_t *buffer, uint16_t preferred_size, int32_t *offset){
+#if DEBUG == 1
+    PRINTF("Received get on coap group resource\n");            
+#endif
+    
+    PRINT_STAT("\nCTR_RCV_GET");
+    uint8_t length = 60;
+    char message[length];
+
+    sprintf(message, "Ciao a tutti, questa è una risorsa\n");
+    length = strlen(message);
+    memcpy(buffer, message, length);
+
+    REST.set_header_content_type(response, REST.type.TEXT_PLAIN); 
+    REST.set_header_etag(response, (uint8_t *) &length, 1);
+    REST.set_response_payload(response, buffer, length);
+}
+
+
+RESOURCE(resource_flow_table, "title=\"Resource\";rt=\"Text\"", NULL, NULL, put_handler_flowtable, NULL);
+RESOURCE(resource_coap_group, "title=\"Resource\";rt=\"Text\"", get_handler, post_handler, NULL, NULL);
 
 PROCESS_THREAD(coap_client_process, ev, data){
     PROCESS_BEGIN();
@@ -597,18 +652,18 @@ PROCESS_THREAD(coap_client_process, ev, data){
     //coap_init_engine();
     rest_init_engine();
     rest_activate_resource(&resource_flow_table, "local_control_agent/flow_table");
+    rest_activate_resource(&resource_coap_group, "coap-group");
     while(1) {
         PROCESS_YIELD_UNTIL(ev == PROCESS_EVENT_POLL);
         while((req = get_ref_to_next_request()) != NULL){
             
             if(req != NULL){
                 if(req->type == TABLE_MISS){
-                    printf("TABLE MISS\n");
-                    COAP_BLOCKING_REQUEST(&server_ipaddr, REMOTE_PORT, &req->req_packet, client_table_miss_handler);
+                    COAP_BLOCKING_REQUEST(&controller_ipaddr, REMOTE_PORT, &req->req_packet, client_table_miss_handler);
                 }
                 else if(req->type == TOPOLOGY_UPDATE){
                     PRINTF("TOPOLOGY UPDATE\n");
-                    COAP_BLOCKING_REQUEST(&server_ipaddr, REMOTE_PORT, &req->req_packet, client_topology_update_handler);
+                    COAP_BLOCKING_REQUEST(&controller_ipaddr, REMOTE_PORT, &req->req_packet, client_topology_update_handler);
                 }
                 advance_ring_buf();
             }

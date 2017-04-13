@@ -1204,7 +1204,11 @@ coap_set_payload(void *packet, const void *payload, size_t length)
 
   coap_pkt->payload = (uint8_t *)payload;
   coap_pkt->payload_len = MIN(REST_MAX_CHUNK_SIZE, length);
-
+  /*coap_pkt->payload_len = length;
+  if(length > REST_MAX_CHUNK_SIZE)
+  {
+      coap_set_header_block1(coap_pkt, 0, 1, REST_MAX_CHUNK_SIZE);
+  }*/
   return coap_pkt->payload_len;
 }
 /*---------------------------------------------------------------------------*/

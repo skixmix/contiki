@@ -57,4 +57,16 @@
 /* used by wpcap (see /cpu/native/net/wpcap-drv.c) */
 #define SELECT_CALLBACK 1
 
+//ADDED
+#define SINK_NODE 1
+//#define SINK_NODE 0
+
+#if NETSTACK_CONF_SDN == 1
+#define RPL_CALLBACK_PARENT_SWITCH sdn_rpl_callback_parent_switch
+#define SDN_CALLBACK_ADD_NEIGHBOR sdn_callback_neighbor
+#define SICSLOWPAN_CONF_FRAG 1
+#endif
+//ADDED
+
+
 #endif /* PROJECT_ROUTER_CONF_H_ */

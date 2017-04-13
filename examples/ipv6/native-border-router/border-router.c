@@ -56,6 +56,12 @@
 #include <string.h>
 #include <ctype.h>
 
+//ADDED
+#if NETSTACK_CONF_SDN == 1
+#include "net/sdn/control_agent.h"
+#endif
+//ADDED
+
 #define DEBUG DEBUG_FULL
 #include "net/ip/uip-debug.h"
 
@@ -296,12 +302,23 @@ set_prefix_64(const uip_ipaddr_t *prefix_64)
   prefix_set = 1;
   uip_ds6_set_addr_iid(&ipaddr, &uip_lladdr);
   uip_ds6_addr_add(&ipaddr, 0, ADDR_AUTOCONF);
-
+  
+  
+  
+#if NETSTACK_CONF_SDN == 1
+  //I've tried to put this function call into the sdn module initialization function
+  //which is called by the netstack module at startup time.
+  //But it seems to not work correctly, the coap engine sends bad formatted requests to the server
+  //for instance with no source Coap port.
+  control_agent_init();
+#endif
+#if SINK_NODE == 1
   dag = rpl_set_root(RPL_DEFAULT_INSTANCE, &ipaddr);
   if(dag != NULL) {
     rpl_set_prefix(dag, &prefix, 64);
     PRINTF("created a new RPL dag\n");
   }
+#endif
 }
 /*---------------------------------------------------------------------------*/
 PROCESS_THREAD(border_router_process, ev, data)
@@ -316,10 +333,12 @@ PROCESS_THREAD(border_router_process, ev, data)
   PRINTF("RPL-Border router started\n");
 
   slip_config_handle_arguments(contiki_argc, contiki_argv);
-
+  
+  slip_init();
+#if SINK_NODE == 1
   /* tun init is also responsible for setting up the SLIP connection */
   tun_init();
-
+#endif
   while(!mac_set) {
     etimer_set(&et, CLOCK_SECOND);
     request_mac();

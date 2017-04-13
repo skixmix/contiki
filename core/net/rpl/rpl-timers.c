@@ -49,6 +49,10 @@
 #include "lib/random.h"
 #include "sys/ctimer.h"
 
+#ifndef RPL_DAO_ENABLE
+#define RPL_DAO_ENABLE 1
+#endif
+
 #define DEBUG DEBUG_NONE
 #include "net/ip/uip-debug.h"
 
@@ -342,12 +346,20 @@ schedule_dao(rpl_instance_t *instance, clock_time_t latency)
 void
 rpl_schedule_dao(rpl_instance_t *instance)
 {
+
+#if RPL_DAO_ENABLE == 0
+    return;
+#endif    
+
   schedule_dao(instance, RPL_DAO_DELAY);
 }
 /*---------------------------------------------------------------------------*/
 void
 rpl_schedule_dao_immediately(rpl_instance_t *instance)
 {
+#if RPL_DAO_ENABLE == 0
+    return;
+#endif
   schedule_dao(instance, 0);
 }
 /*---------------------------------------------------------------------------*/

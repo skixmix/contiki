@@ -26,7 +26,9 @@
 //#include "dev/battery-sensor.h"
 
 #define TTL_INTERVAL		(1 * CLOCK_SECOND)
-#define TOP_UPDATE_PERIOD       (5 * 60 * CLOCK_SECOND)
+#define TOP_UPDATE_FIRST       (1 * 60 * CLOCK_SECOND)          //First topology update after one minute
+#define TOP_UPDATE_SECOND       (2 * 60 * CLOCK_SECOND)         //Second topology update after one minute starting from the first one
+#define TOP_UPDATE_PERIOD       (5 * 60 * CLOCK_SECOND)         //After the second update, send reports once every 5 minutes
 #define MAX_DIM_PAYLOAD         8 + (16 * NBR_TABLE_CONF_MAX_NEIGHBORS)               
 #define MAX_REQUEST             4       //Must be a power of two
 

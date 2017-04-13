@@ -19,14 +19,14 @@
 #endif
 
 #define DEBUG 1
-#if DEBUG && (!SINK || DEBUG_SINK)
+#if DEBUG
 #include <stdio.h>
 #define PRINTF(...) printf(__VA_ARGS__)
 #else
 #define PRINTF(...)
 #endif
 
-LIST(flowtable);
+LIST(flowTable);
 MEMB(entries_memb, entry_t, MAX_NUM_ENTRIES);
 MEMB(actions_memb, action_t, MAX_NUM_ACTIONS);
 MEMB(rules_memb, rule_t, MAX_NUM_RULES);
@@ -41,7 +41,7 @@ uint8_t clean_up_oldest_entry(){
 }
 */
 void flowtable_init(){
-    list_init(flowtable);
+    list_init(flowTable);
     memb_init(&entries_memb);
     memb_init(&rules_memb);
     memb_init(&actions_memb);
@@ -294,17 +294,17 @@ uint8_t add_entry_to_ft(entry_t* entry){
     priority = entry->priority;
     
     //Sorted insert into the flow table list  
-    for(tmp = list_head(flowtable); tmp != NULL; tmp = tmp->next){
+    for(tmp = list_head(flowTable); tmp != NULL; tmp = tmp->next){
         if(tmp->priority > priority)
             break;
         help = tmp;
     }
     //Last element of the list
     if(tmp == NULL && help != NULL)
-        list_add(flowtable, entry);
+        list_add(flowTable, entry);
     //First element of the list
     else if(help == NULL)
-        list_push(flowtable, entry);
+        list_push(flowTable, entry);
     //Insert the element in the middle of the list
     else{
         entry->next = help->next;
@@ -314,7 +314,7 @@ uint8_t add_entry_to_ft(entry_t* entry){
 }
 
 void print_action(action_t* a){
-#if DEBUG
+#if DEBUG == 1
     switch(a->type){
         case FORWARD: PRINTF("FORWARD "); break;
         case DROP: PRINTF("DROP "); break;
@@ -323,6 +323,7 @@ void print_action(action_t* a){
         case INCREMENT: PRINTF("INCREMENT "); break;
         case CONTINUE: PRINTF("CONTINUE "); break;
         case TO_UPPER_L: PRINTF("TO_UPPER_L "); break;
+        case BROADCAST: PRINTF("BROADCAST "); break;
         default: PRINTF("NO_ACTION ");
             
     }
@@ -367,7 +368,7 @@ void print_action(action_t* a){
 }
 
 void print_rule(rule_t* r){
-#if DEBUG
+#if DEBUG == 1
     switch(r->field){
         case LINK_SRC_ADDR: PRINTF("LINK_SRC_ADDR "); break;
         case LINK_DST_ADDR: PRINTF("LINK_DST_ADDR "); break;
@@ -416,7 +417,7 @@ void print_rule(rule_t* r){
 }
 
 void print_entry(entry_t* e) {
-#if DEBUG
+#if DEBUG == 1
     rule_t *r;
     action_t *a;
     PRINTF("Priority %u: IF (", e->priority);
@@ -429,21 +430,21 @@ void print_entry(entry_t* e) {
         print_action(a);
         PRINTF(";");
     } 
-    PRINTF("}[%d %d]", e->stats.ttl, e->stats.count);   
+    PRINTF("}[%d %d]\n", e->stats.ttl, e->stats.count);   
 #endif
 }
 
 void print_flowtable() {
-#if DEBUG
+#if DEBUG == 1
     entry_t *e;
     int i;
     uint8_t dim;
-    uint8_t* status_register = getStatusRegisterPtr(&dim);
+    uint8_t* status_register = getStateRegisterPtr(&dim);
     PRINTF("\nNODE STATE: ");
     for(i = 0; i < dim; i++)
             PRINTF("%02x", status_register[i]);
     PRINTF("\n");
-    for(e = list_head(flowtable); e != NULL; e = e->next) {
+    for(e = list_head(flowTable); e != NULL; e = e->next) {
         PRINTF("[FLT]: ");
         print_entry(e);
         PRINTF("\n");  
@@ -452,7 +453,7 @@ void print_flowtable() {
 }
 
 entry_t* getFlowTableHead(){
-    return list_head(flowtable);
+    return list_head(flowTable);
 }
 
 uint8_t compare_rules(rule_t* rule1, rule_t* rule2){
@@ -518,7 +519,7 @@ entry_t* find_entry(entry_t* entry_to_match){
     action_list = list_head(entry_to_match->actions);
     
     //Search the entry with the same rules as the parameter
-    for(entry = list_head(flowtable); entry != NULL; entry = entry->next){
+    for(entry = list_head(flowTable); entry != NULL; entry = entry->next){
         if(num_rules != list_length(entry->rules))
             continue;
         //Initialize support pointers
@@ -578,7 +579,7 @@ uint8_t remove_entry(entry_t* entry_to_match){
     if(entry == NULL)
         return 0;
     
-    list_remove(flowtable, entry);
+    list_remove(flowTable, entry);
     deallocate_entry(entry);
     return 1;
 }
@@ -677,13 +678,19 @@ uint8_t* install_flow_entry_from_cbor(cn_cbor* flowEntry){
         }
     }
     /*--------------------------STAT-----------------------------*/
+#if SDN_STATS == 1
     PRINT_STAT("\nF_E_");
-    PRINT_STAT_LLADDR(rule->value.bytes);
+    if(rule->size == 64)
+        PRINT_STAT_LLADDR(rule->value.bytes);
+    else if(rule->size == 16)
+        printf("%02x:%02x", rule->value.bytes[6], rule->value.bytes[7]);            
     PRINT_STAT("->");
-    PRINT_STAT_LLADDR(action->value.bytes);
+    if(action->size = 64 && action->size != 0)
+        PRINT_STAT_LLADDR(action->value.bytes);
     PRINT_STAT("\n");
+#endif
     /*-----------------------------------------------------------*/
-    PRINTF("Installed: ");
+    PRINTF("\nInstalled: ");
 #if DEBUG == 1
     print_entry(entry);
 #endif    
@@ -707,9 +714,20 @@ void flowtable_test(){
     uint8_t addr_1[8]  = {0x00, 0x01, 0x00, 0x01, 0x00, 0x01, 0x00, 0x01};
     //uint8_t addr_1[8]  = {0x00, 0x12, 0x74, 0x00, 0x16, 0xc0, 0x77, 0xed};
     //uint8_t addr_1[8]  = {0xc1, 0x0c, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01};
+    uint8_t multicastMesh = 0x80;
     rule_t* rule;
     action_t* action;
     entry_t* entry;
+    
+    //Drop rule for multicast packets
+    entry = create_entry(80);
+    rule = create_rule(MH_DST_ADDR, 0, 3, EQUAL, &multicastMesh);
+    action= create_action(DROP, NO_FIELD, 0, 0, NULL);
+    add_rule_to_entry(entry, rule);    
+    add_action_to_entry(entry, action);
+    add_entry_to_ft(entry);
+    printf("SIZE Entry = %d SIZE action: %d SIZE rule: %d\n", sizeof(entry_t), sizeof(action_t), sizeof(rule_t));
+    printf("SIZE routing table entry: %d plus %d\n", sizeof(uip_ds6_route_t), sizeof(struct uip_ds6_route_neighbor_routes));
     
     if(memcmp(&linkaddr_node_addr, addr_1, 8) == 0){
         

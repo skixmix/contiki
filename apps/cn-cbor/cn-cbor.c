@@ -1,6 +1,13 @@
 #ifndef CN_CBOR_C
 #define CN_CBOR_C
 
+#ifdef  __cplusplus
+extern "C" {
+#endif
+#ifdef EMACS_INDENTATION_HELPER
+} /* Duh. */
+#endif
+
 
 #ifdef CONTIKI
 #define CBOR_NO_FLOAT 1
@@ -17,7 +24,7 @@
 #include "memb.h"
 
 #ifndef CBOR_MAX_ELEM
-#define CBOR_MAX_ELEM 64
+# define CBOR_MAX_ELEM 64
 #endif
 
 MEMB(cbor_pool, cn_cbor, CBOR_MAX_ELEM);

@@ -15,7 +15,7 @@
 #include "net/sdn/datapath.h"
 #include "net/link-stats.h"
 
-#define SDN_STATS 0
+#define SDN_STATS 1
 #if SDN_STATS
 #include <stdio.h>
 #define PRINT_STAT(...) printf(__VA_ARGS__)
@@ -23,13 +23,14 @@
 #define MESH_TAG_CONTROL_HL             0x0c    
 #define MESH_TAG_DATA_HL                0x0e    
 #define MESH_TAG_RPL_HL                 0x0b 
+#define MESH_TAG_MULTICAST_HL           0x0a
 #else
 #define PRINT_STAT(...)
 #define PRINT_STAT_LLADDR(addr)
 #endif
 
 
-#define DEBUG 1
+#define DEBUG 0
 #if DEBUG
 #include <stdio.h>
 #define PRINTF(...) printf(__VA_ARGS__)
@@ -42,21 +43,21 @@
 #endif
 
 
-#define MAX_NUM_MESH_ADDRS 1
+#define MAX_NUM_MESH_ADDRS 5
 #define MAX_NUM_IP_ADDRS 1
 
 
 
 /*---------------------------------Shared data--------------------------------*/
-RPLconfig rpl_config;                           //It specifies how to treat RPL packets
-linkaddr_t* nodeMAC;                            //Pointer to the MAC address associated with the node 
-linkaddr_t meshAddrList[MAX_NUM_MESH_ADDRS];    //Array of link-layer addresses (unicast and multicast) 
+static RPLconfig rpl_config;                           //It specifies how to treat RPL packets
+static linkaddr_t* nodeMAC;                            //Pointer to the MAC address associated with the node 
+static linkaddr_t meshAddrList[MAX_NUM_MESH_ADDRS];    //Array of link-layer addresses (unicast and multicast) 
                                                 //which are associated with the node
-uip_ipaddr_t ipAddrList[MAX_NUM_IP_ADDRS];      //Array of ip-layer addresses (unicast and multicast) 
+static uip_ipaddr_t ipAddrList[MAX_NUM_IP_ADDRS];      //Array of ip-layer addresses (unicast and multicast) 
                                                 //which are associated with the node
-
-mac_callback_t sent_callback;
-void *ptr_copy;
+static uint8_t lastIndex;
+static mac_callback_t sent_callback;
+static void *ptr_copy;
 
 /*
  * Initialization function which is called during the bootstrap 
@@ -64,12 +65,25 @@ void *ptr_copy;
 void
 sdn_init(void)
 {
+    lastIndex = 0;
     memset(ipAddrList, 0, sizeof(uip_ipaddr_t) * MAX_NUM_IP_ADDRS);
     memset(meshAddrList, 0, sizeof(linkaddr_t) * MAX_NUM_MESH_ADDRS);
     rpl_config = RPL_BYPASS;
     nodeMAC = &linkaddr_node_addr;              //Useless with the native code, since the real MAC addres is being taken few seconds later the stack initialization
-    linkaddr_copy(&meshAddrList[0], nodeMAC);   //Useless with the native code    
+    linkaddr_copy(&meshAddrList[lastIndex], nodeMAC);   //Useless with the native code  
+    lastIndex++; 
+    datapath_init();
     PRINTF("SDN layer started");
+}
+
+int addMeshMulticastAddress(linkaddr_t* mesh_multicast){
+    if(mesh_multicast == NULL)
+        return 0;
+    if(lastIndex == MAX_NUM_MESH_ADDRS)
+        return 0;
+    linkaddr_copy(&meshAddrList[lastIndex], mesh_multicast);
+    lastIndex++;
+    return 1;
 }
 
 int isRPLMulticast(uip_ipaddr_t* ipAddr){
@@ -84,7 +98,7 @@ int meshAddrIsMulticast(linkaddr_t* meshAddr, uint8_t meshAddrDim){
     if(meshAddr == NULL)
         return -1;
     if(meshAddrDim == 2)
-        if((meshAddr->u8[6] & 0xe0) == 0x80)
+        if((meshAddr->u8[0] & 0xe0) == 0x80)
             return 1;
         else
             return 0;
@@ -134,6 +148,8 @@ int forward(){
             PRINT_STAT("\nS_FC_%u\n", packetbuf_datalen());
 	else if(hopLimit == MESH_TAG_RPL_HL)
 	    PRINT_STAT("\nS_FR_%u\n", packetbuf_datalen());
+        else if(hopLimit == MESH_TAG_MULTICAST_HL)
+            PRINT_STAT("\nS_FM_%u\n", packetbuf_datalen());
         else
             PRINT_STAT("\nS_FD_%u\n", packetbuf_datalen());
     }
@@ -165,6 +181,7 @@ input(void)
     sent_callback = NULL;
     ptr_copy = NULL;
     linkaddr_copy(&meshAddrList[0], &linkaddr_node_addr);       //Because of the native code takes few seconds to set the MAC address from the slip-radio program which runs onto the real node 
+    struct queuebuf *q;
     /*-------------------------------DEBUG--------------------------------*/
 #if DEBUG
     const linkaddr_t* source;
@@ -182,6 +199,8 @@ input(void)
             PRINT_STAT("\nS_IC_%u\n", packetbuf_datalen());
 	else if(hopLimit == MESH_TAG_RPL_HL)
 	    PRINT_STAT("\nS_IR_%u\n", packetbuf_datalen());
+        else if(hopLimit == MESH_TAG_MULTICAST_HL)
+            PRINT_STAT("\nS_IM_%u\n", packetbuf_datalen());
         else
             PRINT_STAT("\nS_ID_%u\n", packetbuf_datalen());
     }
@@ -196,7 +215,7 @@ input(void)
     //Check if the packet has Mesh Header    
     if(pktHasMeshHeader(ptr) == 1){
         
-        //DEBUG
+#if DEBUG
         linkaddr_t origAddr;
         uint8_t origAddrDim;
         uint8_t hopLimit;
@@ -210,27 +229,34 @@ input(void)
         PRINTF(" Dim = %u Orig. Address: ", origAddrDim);
         PRINTLLADDR(&origAddr);
         PRINTF("\n");
-        //DEBUG
+#endif
                 
         //Read the Final Address from the Mesh Header
+        memset(&finalAddr, 0, sizeof(finalAddr));
         parseMeshHeader(ptr, NULL, &(finalAddr.u8), &finalAddrDim, NULL, NULL);
         
         //Check if it is a mesh multicast address
         if(meshAddrIsMulticast(&finalAddr, finalAddrDim) == 1){
-            //If so, first thing to do is to process it using the flow table
-            matchPacket();
-            /*
-             * NOTE: the flow table could (and likely will) modify the packet.
-             * Thus, if it turns out that the packet must be sent ALSO 
-             * to the upper layer, we need to make a copy of the actual content
-             * of the packet buffer, before sending it to the flow table.
-            */
+            PRINTF("SDN: Received a multicast packet\n");
+            q = queuebuf_new_from_packetbuf();
+            if(q == NULL) {
+              PRINTF("SDN: could not allocate queuebuf multicast packet, dropping packet\n");
+              return 0;
+            }
             
             //Then check if the packet is addressed to this node
             if(meshAddrListContains(&finalAddr) == 1){
+                PRINTF("SDN: Send multicast packet to upper layer\n");
                 //This packet must be sent to the upper layer
                 NETSTACK_NETWORK.input();
             }
+                        
+            queuebuf_to_packetbuf(q);
+            queuebuf_free(q);
+            q = NULL;
+            
+            //If so, first thing to do is to process it using the flow table            
+            processPacket();
         }
         else{
             //Check if this packet is addressed to me
@@ -241,7 +267,7 @@ input(void)
             }
             else{
                 //Otherwise it must be handled by the Flow Table
-                matchPacket();
+                processPacket();
             }
         }
     }
@@ -268,14 +294,14 @@ input(void)
             }
             else{
                 //Otherwise handle it with the Flow Table
-                matchPacket();
+                processPacket();
             }
         }
         else{
             //Check if it is a multicast address
             if(uip_is_addr_mcast(&ipAddr) == 1){
                 //If so, first thing to do is to process the packet with the Flow Table
-                matchPacket();
+                processPacket();
                 /*
                 * NOTE: the flow table could (and likely will) modify the packet.
                 * Thus, if it turns out that the packet must be sent ALSO 
@@ -300,7 +326,7 @@ input(void)
                 }
                 else{
                     //Otherwise it must be handled by the Flow Table
-                    matchPacket();
+                    processPacket();
                 }
             }
         }    
@@ -319,7 +345,7 @@ send(mac_callback_t sent, void *ptr)
     
     sent_callback = sent;
     ptr_copy = ptr;
-#if DEBUG
+#if DEBUG == 1
     uint8_t* ptr_to_pkt = packetbuf_dataptr();
     linkaddr_t* dest;
     uint8_t hopLimit;
@@ -366,12 +392,12 @@ send(mac_callback_t sent, void *ptr)
         }
         else{
             //Otherwise handle the packet using the Flow Table
-            matchPacket();
+            processPacket();
         }
     }
     else{
         //Otherwise handle the packet using the Flow Table
-        matchPacket();
+        processPacket();
     }
 }
 

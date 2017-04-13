@@ -18,13 +18,13 @@
 
 /*-------------------------Constants definition-------------------------------*/
 
-#define MAX_NUM_ENTRIES         10
-#define MAX_NUM_RULES           10
-#define MAX_NUM_ACTIONS         10
-#define NUM_BYTES_2_BLOCKS      5
+#define MAX_NUM_ENTRIES         40
+#define MAX_NUM_RULES           40
+#define MAX_NUM_ACTIONS         40
+#define NUM_BYTES_2_BLOCKS      10
 #define NUM_BYTES_4_BLOCKS      0
-#define NUM_BYTES_8_BLOCKS      20
-#define NUM_BYTES_16_BLOCKS     0
+#define NUM_BYTES_8_BLOCKS      70
+#define NUM_BYTES_16_BLOCKS     5
 
 /*---------------------Flow Table data structures-----------------------------*/
 
@@ -51,7 +51,8 @@ typedef enum {
     DECREMENT = 4,
     INCREMENT = 5,
     CONTINUE = 6,
-    TO_UPPER_L = 7
+    TO_UPPER_L = 7,
+    BROADCAST = 8
 } action_type_t;
 
 typedef enum {

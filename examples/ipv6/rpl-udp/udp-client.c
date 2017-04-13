@@ -77,17 +77,16 @@
 #include "net/ip/uip-debug.h"
 
 #ifndef PERIOD
-#define PERIOD 60
+#define PERIOD 60 * 1
 #endif
 
 #define START_INTERVAL		(15 * CLOCK_SECOND)
 #define SEND_INTERVAL		(PERIOD * CLOCK_SECOND)
-#define SEND_TIME		(random_rand() % (SEND_INTERVAL))
+#define SEND_TIME		((SEND_INTERVAL / 2) + random_rand() % (SEND_INTERVAL))
 #define MAX_PAYLOAD_LEN		80
-#define NUM_OF_RECEIVERS        4
 
 static struct uip_udp_conn *client_conn;
-static uip_ipaddr_t server_ipaddr[NUM_OF_RECEIVERS];
+static uip_ipaddr_t server_ipaddr;
 
 /*---------------------------------------------------------------------------*/
 PROCESS(udp_client_process, "UDP client process");
@@ -95,7 +94,6 @@ AUTOSTART_PROCESSES(&udp_client_process);
 /*---------------------------------------------------------------------------*/
 static int seq_id;
 static int reply;
-static unsigned int counter;
 
 static void
 tcpip_handler(void)
@@ -115,7 +113,6 @@ static void
 send_packet(void *ptr)
 {
   char buf[MAX_PAYLOAD_LEN];
-  int rand_index = (counter % NUM_OF_RECEIVERS);
 #ifdef SERVER_REPLY
   uint8_t num_used = 0;
   uip_ds6_nbr_t *nbr;
@@ -133,13 +130,12 @@ send_packet(void *ptr)
 #endif /* SERVER_REPLY */
 
   seq_id++;
-  counter++;
-  PRINT_STAT("\nC_S_%d->%d\n", seq_id, server_ipaddr[rand_index].u8[sizeof(server_ipaddr[rand_index].u8) - 1]);
+  PRINT_STAT("\nC_S_%d->%d\n", seq_id, server_ipaddr.u8[sizeof(server_ipaddr.u8) - 1]);
   PRINTF("DATA send to %d 'Hello %d'\n",
-         server_ipaddr[rand_index].u8[sizeof(server_ipaddr[rand_index].u8) - 1], seq_id);
+         server_ipaddr.u8[sizeof(server_ipaddr.u8) - 1], seq_id);
   sprintf(buf, "Hello, this is a payload, sequence id = %d", seq_id);
   uip_udp_packet_sendto(client_conn, buf, strlen(buf),
-                        &server_ipaddr[rand_index], UIP_HTONS(UDP_SERVER_PORT));
+                        &server_ipaddr, UIP_HTONS(UDP_SERVER_PORT));
 }
 /*---------------------------------------------------------------------------*/
 static void
@@ -193,10 +189,7 @@ set_global_address(void)
    uip_ip6addr(&server_ipaddr[2], UIP_DS6_DEFAULT_PREFIX, 0, 0, 0, 0x0209, 9, 9, 9);
    uip_ip6addr(&server_ipaddr[3], UIP_DS6_DEFAULT_PREFIX, 0, 0, 0, 0x020a, 0x000a, 0x000a, 0x000a);
    */
-   uip_ip6addr(&server_ipaddr[0], UIP_DS6_DEFAULT_PREFIX, 0, 0, 0, 0, 0, 0, 2);
-   uip_ip6addr(&server_ipaddr[1], UIP_DS6_DEFAULT_PREFIX, 0, 0, 0, 0, 0, 0, 2);
-   uip_ip6addr(&server_ipaddr[2], UIP_DS6_DEFAULT_PREFIX, 0, 0, 0, 0, 0, 0, 2);
-   uip_ip6addr(&server_ipaddr[3], UIP_DS6_DEFAULT_PREFIX, 0, 0, 0, 0, 0, 0, 2);
+   uip_ip6addr(&server_ipaddr, UIP_DS6_DEFAULT_PREFIX, 0, 0, 0, 0, 0, 0, 2);
 #elif 0
 /* Mode 2 - 16 bits inline */
   uip_ip6addr(&server_ipaddr, UIP_DS6_DEFAULT_PREFIX, 0, 0, 0, 0, 0x00ff, 0xfe00, 1);
@@ -228,7 +221,6 @@ PROCESS_THREAD(udp_client_process, ev, data)
 
   print_local_addresses();
   
-  counter = random_rand() % NUM_OF_RECEIVERS;
 
   /* new connection with remote host */
   client_conn = udp_new(NULL, UIP_HTONS(UDP_SERVER_PORT), NULL); 

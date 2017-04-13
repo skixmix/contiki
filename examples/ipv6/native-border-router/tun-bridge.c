@@ -190,7 +190,7 @@ tun_init()
 {
   setvbuf(stdout, NULL, _IOLBF, 0); /* Line buffered output. */
 
-  slip_init();
+  //slip_init();
 }
 
 #else
@@ -204,7 +204,7 @@ tun_init()
 {
   setvbuf(stdout, NULL, _IOLBF, 0); /* Line buffered output. */
 
-  slip_init();
+  //slip_init();
 
   tunfd = tun_alloc(slip_config_tundev);
   if(tunfd == -1) err(1, "main: open");
