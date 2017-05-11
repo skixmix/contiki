@@ -131,4 +131,10 @@
 #define RPL_CONF_MOP RPL_MOP_NON_STORING /* Mode of operation*/
 #endif /* WITH_NON_STORING */
 
+//For IoT-LAB testbed
+#define RF2XX_TX_POWER  PHY_POWER_m10dBm
+#define RF2XX_RX_RSSI_THRESHOLD  RF2XX_PHY_RX_THRESHOLD__m81dBm
+#undef  RF2XX_CHANNEL
+#define RF2XX_CHANNEL   16
+
 #endif

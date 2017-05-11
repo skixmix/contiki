@@ -15,7 +15,7 @@
 #include "net/sdn/datapath.h"
 #include "net/link-stats.h"
 
-#define SDN_STATS 1
+#define SDN_STATS 0
 #if SDN_STATS
 #include <stdio.h>
 #define PRINT_STAT(...) printf(__VA_ARGS__)

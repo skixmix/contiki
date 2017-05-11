@@ -68,8 +68,8 @@
 #define PRINT_STAT_LLADDR(addr)
 #endif
 
-#define DEBUG DEBUG_NONE
-//#define DEBUG DEBUG_PRINT
+//#define DEBUG DEBUG_NONE
+#define DEBUG DEBUG_PRINT
 #include "net/ip/uip-debug.h"
 
 /* A configurable function called after every RPL parent switch */

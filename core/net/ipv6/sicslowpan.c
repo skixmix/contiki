@@ -72,7 +72,7 @@
 #include "net/rpl/rpl.h"
 #include <stdio.h>
 
-#define SDN_STATS 1
+#define SDN_STATS 0
 #if SDN_STATS
 #include <stdio.h>
 #define PRINT_STAT(...) printf(__VA_ARGS__)
@@ -1572,7 +1572,7 @@ int readIPaddr(uip_ipaddr_t* destAddr){
     }
     if(pktHasMeshHeader(NULL)){
         mesh_src = memb_alloc(&linkaddr_memb);
-        packetbuf_hdr_len += parseMeshHeader(NULL, NULL, NULL, NULL, &(mesh_src->u8), NULL);
+        packetbuf_hdr_len += parseMeshHeader(NULL, NULL, NULL, NULL, (uint8_t*)&(mesh_src->u8), NULL);
     }
     
 
@@ -2180,7 +2180,7 @@ input(void)
   if(pktHasMeshHeader(NULL)){
       mesh_src = memb_alloc(&linkaddr_memb);
       //Just take the originator address for uncompression purpose
-      packetbuf_hdr_len += parseMeshHeader(NULL, NULL, NULL, NULL, &(mesh_src->u8), NULL);
+      packetbuf_hdr_len += parseMeshHeader(NULL, NULL, NULL, NULL, (uint8_t*)&(mesh_src->u8), NULL);
       
   }
 #endif

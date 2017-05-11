@@ -63,8 +63,8 @@
 #define RPL_DAO_ENABLE 1
 #endif
 
-#define DEBUG DEBUG_NONE
-//#define DEBUG DEBUG_PRINT
+//#define DEBUG DEBUG_NONE
+#define DEBUG DEBUG_PRINT
 
 #include "net/ip/uip-debug.h"
 

@@ -21,6 +21,7 @@
 #define DEBUG 1
 #if DEBUG
 #include <stdio.h>
+#define PRINT_LLADDR(addr) printf("%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x", ((uint8_t *)addr)[0], ((uint8_t *)addr)[1], ((uint8_t *)addr)[2], ((uint8_t *)addr)[3], ((uint8_t *)addr)[4], ((uint8_t *)addr)[5], ((uint8_t *)addr)[6], ((uint8_t *)addr)[7])
 #define PRINTF(...) printf(__VA_ARGS__)
 #else
 #define PRINTF(...)
@@ -711,7 +712,7 @@ uint8_t* install_flow_entry_from_cbor(cn_cbor* flowEntry){
 void flowtable_test(){
     uint8_t addr_tunslip[8]  = {0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01};
     uint8_t addr_udpServer[8]  = {0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02};
-    uint8_t addr_1[8]  = {0x00, 0x01, 0x00, 0x01, 0x00, 0x01, 0x00, 0x01};
+    uint8_t addr_1[8]  = {0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0xc1, 0x71};	//020000000000c171
     //uint8_t addr_1[8]  = {0x00, 0x12, 0x74, 0x00, 0x16, 0xc0, 0x77, 0xed};
     //uint8_t addr_1[8]  = {0xc1, 0x0c, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01};
     uint8_t multicastMesh = 0x80;
@@ -726,8 +727,9 @@ void flowtable_test(){
     add_rule_to_entry(entry, rule);    
     add_action_to_entry(entry, action);
     add_entry_to_ft(entry);
-    printf("SIZE Entry = %d SIZE action: %d SIZE rule: %d\n", sizeof(entry_t), sizeof(action_t), sizeof(rule_t));
-    printf("SIZE routing table entry: %d plus %d\n", sizeof(uip_ds6_route_t), sizeof(struct uip_ds6_route_neighbor_routes));
+    PRINTF("NODE MAC ADDRESS: ");
+    PRINT_LLADDR(&linkaddr_node_addr);
+    PRINTF("\n");
     
     if(memcmp(&linkaddr_node_addr, addr_1, 8) == 0){
         
@@ -768,6 +770,7 @@ void flowtable_test(){
          * in order to send packets toward the border router and, at the same 
          * time, avoiding inserting static paths. 
          */
+
         entry = create_entry(1);
         rule = create_rule(MH_DST_ADDR, 0, 64, EQUAL, addr_tunslip);
         add_rule_to_entry(entry, rule);
@@ -776,7 +779,7 @@ void flowtable_test(){
         action= create_action(CONTINUE, NO_FIELD, 0, 0, NULL);
         add_action_to_entry(entry, action);
         add_entry_to_ft(entry);
-        
+
     }
     //print_flowtable();
 }

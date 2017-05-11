@@ -8,7 +8,7 @@
 #include "net/sdn/control_agent.h"
 
 
-#define SDN_STATS 1
+#define SDN_STATS 0
 #if SDN_STATS
 #include <stdio.h>
 #define PRINT_STAT(...) printf(__VA_ARGS__)
@@ -18,7 +18,7 @@
 #define PRINT_STAT_LLADDR(addr)
 #endif
 
-#define DEBUG 0
+#define DEBUG 1
 #if DEBUG
 #include <stdio.h>
 #define PRINTF(...) printf(__VA_ARGS__)
@@ -143,31 +143,38 @@ void sdn_rpl_callback_parent_switch(rpl_parent_t *old, rpl_parent_t *new){
     if(new != NULL){
         extractIidFromIpAddr(&llAddrParent, rpl_get_parent_ipaddr(new), &addrDim);
         extractIidFromIpAddr(&llAddrRoot, &new->dag->dag_id, &addrDim);
+
+	PRINTF("Control Agent: added parent: ");
+	PRINTLLADDR(&llAddrParent);
+	PRINTF(" to root: ");
+	PRINTLLADDR(&llAddrRoot);    
+	PRINTF("\n");
         
         entry = create_entry(70);
-        if(entry == NULL)
+        if(entry == NULL){
+	    PRINTF("Control Agent: failed to create flow entry\n");
             return;
+	}
         rule = create_rule(MH_DST_ADDR, 0, 64, EQUAL, &llAddrRoot);
         if(rule == NULL){
             deallocate_entry(entry);
+ 	    PRINTF("Control Agent: failed to create rule\n");
             return; 
         }
         action= create_action(FORWARD, NO_FIELD, 0, 64, &llAddrParent);
         if(action == NULL){
             deallocate_entry(entry);
             deallocate_rule(rule);
+	    PRINTF("Control Agent: failed to create action\n");
             return; 
         }
         add_rule_to_entry(entry, rule);
         add_action_to_entry(entry, action);
         add_entry_to_ft(entry);
-        
+
+	
     }
-    PRINTF("Control Agent: added parent: ");
-    PRINTLLADDR(&llAddrParent);
-    PRINTF(" to root: ");
-    PRINTLLADDR(&llAddrRoot);    
-    PRINTF("\n");
+    
     
     PRINT_STAT("\nCTR_RPL_ADD-");
     PRINT_STAT_LLADDR(&llAddrParent);
@@ -332,7 +339,7 @@ void handleTableMiss(linkaddr_t* L2_receiver, linkaddr_t* L2_sender, uint8_t* pt
     //Set type of message: CON and POST
     coap_init_message(&req->req_packet, COAP_TYPE_CON, COAP_POST, 0);
     //Set the target resource 
-    coap_set_header_uri_path(&req->req_packet, "fe");
+    coap_set_header_uri_path(&req->req_packet, "Flow_engine");
     //Set the query parameter: "?type=all&mac=<sender's mac address>"
     //URI_QUERY_ALL_PACKET(uri_query, L2_sender, L2_receiver);
     URI_QUERY_ALL_PACKET(uri_query, nodeAddr);
@@ -439,7 +446,7 @@ static void topology_update(void *ptr){
         //Set type of message: CON and POST
         coap_init_message(&req->req_packet, COAP_TYPE_CON, COAP_POST, 0);
         //Set the target resource 
-        coap_set_header_uri_path(&req->req_packet, "6lo");
+        coap_set_header_uri_path(&req->req_packet, "Network");
         //Set the query parameter: "?mac=<node's mac address>"
         URI_QUERY_MAC_ADDR(uri_query, nodeAddr);
         coap_set_header_uri_query(&req->req_packet, uri_query);
@@ -651,8 +658,8 @@ PROCESS_THREAD(coap_client_process, ev, data){
     /* receives all CoAP messages */
     //coap_init_engine();
     rest_init_engine();
-    rest_activate_resource(&resource_flow_table, "lca/ft");
-    rest_activate_resource(&resource_coap_group, "cg");
+    rest_activate_resource(&resource_flow_table, "local_control_agent/flow_table");
+    rest_activate_resource(&resource_coap_group, "coap-group");
     while(1) {
         PROCESS_YIELD_UNTIL(ev == PROCESS_EVENT_POLL);
         while((req = get_ref_to_next_request()) != NULL){
