@@ -2,7 +2,7 @@ SDN-Enabled Contiki OS
 ============================
 This modified version of the Contiki OS allows the implementation of an SDN-enabled WSN on top of real hardware.
 The original simulative-only source code from which this new version was started can be found at [https://github.com/BigMikes/contiki](https://github.com/BigMikes/contiki)
-The hereby enhanced firmware was proposed as a thesis work by [https://www.linkedin.com/in/simone-tavoletta-72604b163](Tavoletta Simone), for the University of Pisa, Italy.
+The hereby enhanced firmware was proposed as a thesis work by [https://www.linkedin.com/in/simone-tavoletta-72604b163](https://www.linkedin.com/in/simone-tavoletta-72604b163), for the University of Pisa, Italy.
 
 SDN-Enabled Example
 ============================
