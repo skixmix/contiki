@@ -63,8 +63,8 @@
 #define RPL_DAO_ENABLE 1
 #endif
 
-//#define DEBUG DEBUG_NONE
-#define DEBUG DEBUG_PRINT
+#define DEBUG DEBUG_NONE
+//#define DEBUG DEBUG_PRINT
 
 #include "net/ip/uip-debug.h"
 
@@ -198,6 +198,7 @@ rpl_icmp6_update_nbr_table(uip_ipaddr_t *from, nbr_table_reason_t reason, void *
     if((nbr = uip_ds6_nbr_add(from, (uip_lladdr_t *)
                               packetbuf_addr(PACKETBUF_ADDR_SENDER),
                               0, NBR_REACHABLE, reason, data)) != NULL) {
+		
       PRINTF("RPL: Neighbor added to neighbor cache ");
       PRINT6ADDR(from);
       PRINTF(", ");

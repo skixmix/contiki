@@ -49,11 +49,11 @@
 #endif
 
 #ifndef QUEUEBUF_CONF_NUM
-#define QUEUEBUF_CONF_NUM          8
+#define QUEUEBUF_CONF_NUM          4 //[SIMONE] from 8 to 4
 #endif
 
 #ifndef UIP_CONF_BUFFER_SIZE
-#define UIP_CONF_BUFFER_SIZE    140
+#define UIP_CONF_BUFFER_SIZE    280 // <---- THIS is the actual problem on the testbed, do not go under 200, otherwise we LOSE the CoAP requests
 #endif
 
 #ifndef UIP_CONF_RECEIVE_WINDOW
@@ -61,6 +61,20 @@
 #endif
 
 //ADDED
+
+//Set to 1 in order to hardcode the MAC address
+#ifndef IEEE_ADDR_CONF_HARDCODED
+#define IEEE_ADDR_CONF_HARDCODED             1
+#endif
+
+//Needed when the definition above is set to 1
+#ifndef IEEE_ADDR_CONF_ADDRESS
+#define IEEE_ADDR_CONF_ADDRESS {0x00, 0x01, 0x00, 0x01, 0x00, 0x01, 0x00, 0x01} //Last 2 bytes can be changed when doing the make operation
+#endif
+//End adding by SIMONE
+
+
+
 #undef UIP_CONF_TCP
 #define UIP_CONF_TCP 0
 #undef SICSLOWPAN_CONF_FRAG
@@ -87,7 +101,7 @@
 #undef COAP_PROXY_OPTION_PROCESSING
 #define COAP_PROXY_OPTION_PROCESSING   0
 
-/* Turn of DAO ACK to make code smaller */
+/* Turn off DAO ACK to make code smaller */
 #undef RPL_CONF_WITH_DAO_ACK
 #define RPL_CONF_WITH_DAO_ACK          0
 #undef WITH_WEBSERVER
@@ -116,14 +130,14 @@
 #undef UIP_CONF_MAX_ROUTES
 #define UIP_CONF_MAX_ROUTES 1 
 #undef NBR_TABLE_CONF_MAX_NEIGHBORS
-#define NBR_TABLE_CONF_MAX_NEIGHBORS 15
+#define NBR_TABLE_CONF_MAX_NEIGHBORS 6 //[SIMONE] from 15 to 9
 
 #else       //ELSE
 
 #undef UIP_CONF_MAX_ROUTES
-#define UIP_CONF_MAX_ROUTES 40 
+#define UIP_CONF_MAX_ROUTES 10 
 #undef NBR_TABLE_CONF_MAX_NEIGHBORS
-#define NBR_TABLE_CONF_MAX_NEIGHBORS 15
+#define NBR_TABLE_CONF_MAX_NEIGHBORS 6 //[SIMONE] from 15 to 9
 
 #endif      //ENDIF
 //ADDED
@@ -132,15 +146,7 @@
 #define WEBSERVER_CONF_CFS_CONNS 0
 #endif
 
-#undef SLIP_ARCH_CONF_ENABLE
-#define SLIP_ARCH_CONF_ENABLE 1
-
-//For IoT-LAB testbed
-#define RF2XX_TX_POWER  PHY_POWER_m10dBm
-#define RF2XX_RX_RSSI_THRESHOLD  RF2XX_PHY_RX_THRESHOLD__m81dBm
-#undef  RF2XX_CHANNEL
-#define RF2XX_CHANNEL   16
-
-
-
 #endif /* PROJECT_ROUTER_CONF_H_ */
+
+
+

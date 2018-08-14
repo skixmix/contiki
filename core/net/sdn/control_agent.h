@@ -26,10 +26,10 @@
 //#include "dev/battery-sensor.h"
 
 #define TTL_INTERVAL		(1 * CLOCK_SECOND)
-#define TOP_UPDATE_FIRST       (1 * 60 * CLOCK_SECOND)          //First topology update after one minute
-#define TOP_UPDATE_SECOND       (2 * 60 * CLOCK_SECOND)         //Second topology update after one minute starting from the first one
-#define TOP_UPDATE_PERIOD       (5 * 60 * CLOCK_SECOND)         //After the second update, send reports once every 5 minutes
-#define MAX_DIM_PAYLOAD         8 + (16 * NBR_TABLE_CONF_MAX_NEIGHBORS)               
+#define TOP_UPDATE_FIRST       (1 * 60 * CLOCK_SECOND)             //First topology update after one minute
+#define TOP_UPDATE_SECOND       (5 * 60 * CLOCK_SECOND)           //Second topology update after 5 minutes starting from the first one
+#define TOP_UPDATE_PERIOD       (10 * 60 * CLOCK_SECOND)         //After the second update, send reports once every 10 minutes
+#define MAX_DIM_PAYLOAD         8 + (16 * NBR_TABLE_CONF_MAX_NEIGHBORS)            
 #define MAX_REQUEST             4       //Must be a power of two
 
 typedef enum {
@@ -53,6 +53,8 @@ typedef struct pending_request{
 void handleTableMiss(linkaddr_t* L2_receiver, linkaddr_t* L2_sender, uint8_t* ptr_to_pkt, uint16_t pkt_dim);
 void sdn_callback_neighbor(const linkaddr_t *addr);
 void control_agent_init();
+//By Simone
+void remove_sdn_rule (const linkaddr_t *addr);
 
 #endif	/* CONTROL_AGENT_H */
 

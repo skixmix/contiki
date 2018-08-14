@@ -72,7 +72,7 @@
 #include "net/rpl/rpl.h"
 #include <stdio.h>
 
-#define SDN_STATS 0
+#define SDN_STATS 1
 #if SDN_STATS
 #include <stdio.h>
 #define PRINT_STAT(...) printf(__VA_ARGS__)
@@ -87,6 +87,7 @@ uip_ipaddr_t udpServer_ipaddr;
 #define PRINT_STAT(...)
 #define PRINT_STAT_LLADDR(addr)
 #endif
+
 
 #define DEBUG DEBUG_NONE
 //#define DEBUG DEBUG_PRINT
@@ -622,7 +623,7 @@ compress_addr_64(uint8_t bitpos, uip_ipaddr_t *ipaddr, uip_lladdr_t *lladdr)
 #define SET_BIT(val, bit)  (val = (val | (1 << bit)))
 
 /*--------------Constants---------------*/
-#define MAX_NUM_ROUTE_OVER_ADDRS    5
+#define MAX_NUM_ROUTE_OVER_ADDRS    2
 #define MESH_ORIGINATOR_ADDR        1 
 #define MESH_FINAL_ADDR             9
 #define MESH_V_FLAG                 5
@@ -750,18 +751,19 @@ void selectFinalDestinationAddress(linkaddr_t* finalAddress, uint8_t* addrDim){
         //Check if this node is the root of the dodag, 
         //or if it has no preferred parent (so it cannot communicate with anyone)
         if(dag->preferred_parent == NULL){
-            //TODO: Drop the packet
+			#if SINK == 1 //It is the root, we are certain, set destination to tunslip MAC, so get the packet dropped
+			  printf("6lowpan: Destination is offlink, and I am the BR\n");
+			  extractIidFromIpAddr(finalAddress, &UIP_IP_BUF->destipaddr, addrDim);
+			#endif
         }
         else{
-            PRINTF(" Destination offlink\n");    //DEBUG
-            //Select the destination ip address equals to the root's one
+            printf("6lowpan: Destination offlink\n");    //DEBUG
+            //Select the destination MAC address equal to the BR one
             dest_ip = &dag->dag_id;
             if(dest_ip == NULL){
-                PRINTF("No root address found ");   //TODO: change in PRINTF
+                printf("No root address found\n");
             }
-            else{
-                PRINTF("DEFAULT GATEWAY IP ADDR: "); //TODO: change in PRINTF
-                PRINT6ADDR(dest_ip);    //TODO: change in debug PRINTF
+            else{   
                 extractIidFromIpAddr(finalAddress, dest_ip, addrDim);
             }
         }      
@@ -769,6 +771,7 @@ void selectFinalDestinationAddress(linkaddr_t* finalAddress, uint8_t* addrDim){
     else{
         //Send the packet directly to the node, so 
         //extract the L2 final address from the IP destination address
+		printf("6lowpan: Destination is onlink\n");
         extractIidFromIpAddr(finalAddress, &UIP_IP_BUF->destipaddr, addrDim);
     }
 }
@@ -785,7 +788,9 @@ void insertMeshHeader(){
     //TODO: the standard impose that if Hop Limit field is uqual to 1111, there 
     //must be a subsequent byte that specifies the actual Hop Limit
 #if SDN_STATS
-    uip_ip6addr(&controller_ipaddr, 0xfd00, 0, 0, 0, 0, 0, 0, 0x0001);
+    uip_ip6addr(&controller_ipaddr, 0x2001, 0x0db8, 0, 0xf101, 0, 0, 0, 0x0001); //Controller IP address
+	//uip_ip6addr(&controller_ipaddr, 0xfd00, 0, 0, 0, 0, 0, 0, 0x0001);
+	
     uip_ip6addr(&udpServer_ipaddr, 0xfd00, 0, 0, 0, 0, 0, 0, 0x0002);
     if(uip_is_addr_mcast(&UIP_IP_BUF->destipaddr) && (uip_ipaddr_cmp(&UIP_IP_BUF->srcipaddr, &controller_ipaddr) == 1 || uip_ipaddr_cmp(&UIP_IP_BUF->srcipaddr, &udpServer_ipaddr) == 1))
         dispatch |= MESH_TAG_MULTICAST_HL;
@@ -866,14 +871,13 @@ uint8_t computeMeshHeaderLength(){
 
 void meshUnderOrRouteOver(){
     if(ipRouteOverListContains(&UIP_IP_BUF->destipaddr) == 1){ //ROUTE OVER -> do nothing
-        /*
-        PRINTF("Route over:");
+        printf("Doing Route over:");
         PRINT6ADDR(&UIP_IP_BUF->destipaddr);
-        PRINTF("\n");
-        */
+        printf("\n");
         return;
     }
     else{ //MESH UNDER -> insert the Mesh Header
+		printf("Doing mesh under\n");
         insertMeshHeader();
         return;
     }
@@ -1572,7 +1576,7 @@ int readIPaddr(uip_ipaddr_t* destAddr){
     }
     if(pktHasMeshHeader(NULL)){
         mesh_src = memb_alloc(&linkaddr_memb);
-        packetbuf_hdr_len += parseMeshHeader(NULL, NULL, NULL, NULL, (uint8_t*)&(mesh_src->u8), NULL);
+        packetbuf_hdr_len += parseMeshHeader(NULL, NULL, NULL, NULL, &(mesh_src->u8), NULL);
     }
     
 
@@ -1847,15 +1851,11 @@ send_packet(linkaddr_t *dest)
   packetbuf_set_addr(PACKETBUF_ADDR_SENDER,(void*)&uip_lladdr);
 #endif
 
-#if NETSTACK_CONF_SDN == 0
-#if SDN_STATS
-  uip_ip6addr(&udpServer_ipaddr, 0xfd00, 0, 0, 0, 0, 0, 0, 0x0002);
-  if(uip_ipaddr_cmp(&UIP_IP_BUF->destipaddr, &udpServer_ipaddr) == 1 || uip_ipaddr_cmp(&UIP_IP_BUF->srcipaddr, &udpServer_ipaddr) == 1)
-      PRINT_STAT("\nS_FD_%u\n", packetbuf_datalen());
-  else
-      PRINT_STAT("\nS_FR_%u\n", packetbuf_datalen());
+//I am sending a packet, so print the statistics (packet size in bytes)
+#if PrintStatistics == 1
+	printf("MSG_SENT_BYTES_%u\n", packetbuf_totlen());
 #endif
-#endif
+
   /* Provide a callback function to receive the result of
      a packet transmission. */
 #if NETSTACK_CONF_SDN == 1
@@ -1988,7 +1988,7 @@ output(const uip_lladdr_t *localdest)
     int freebuf = queuebuf_numfree() - 1;
     PRINTFO("uip_len: %d, fragments: %d, free bufs: %d\n", uip_len, estimated_fragments, freebuf);
     if(freebuf < estimated_fragments) {
-      PRINTFO("Dropping packet, not enough free bufs\n");
+      printf("6LoWPAN: Dropping packet, not enough free bufs\n");
       return 0;
     }
 
@@ -2180,7 +2180,7 @@ input(void)
   if(pktHasMeshHeader(NULL)){
       mesh_src = memb_alloc(&linkaddr_memb);
       //Just take the originator address for uncompression purpose
-      packetbuf_hdr_len += parseMeshHeader(NULL, NULL, NULL, NULL, (uint8_t*)&(mesh_src->u8), NULL);
+      packetbuf_hdr_len += parseMeshHeader(NULL, NULL, NULL, NULL, &(mesh_src->u8), NULL);
       
   }
 #endif
@@ -2455,8 +2455,7 @@ sicslowpan_init(void)
 #endif /* SICSLOWPAN_COMPRESSION == SICSLOWPAN_COMPRESSION_HC06 */
   
   /*-----------------------------6LoWPAN SDN----------------------------------*/
-  uip_ip6addr(&routeOverAddrList[0], 0xff02, 0, 0, 0, 0, 0, 0, 0x001a);
-  //uip_ip6addr(&routeOverAddrList[1], 0xfd00, 0, 0, 0, 0, 0, 0, 0x0001);
+  uip_ip6addr(&routeOverAddrList[0], 0xff02, 0, 0, 0, 0, 0, 0, 0x001a); //RPL	
   memb_init(&linkaddr_memb);
 }
 /*--------------------------------------------------------------------*/

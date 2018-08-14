@@ -46,7 +46,7 @@
 #include "net/rpl/rpl-ns.h"
 #endif /* RPL_WITH_NON_STORING */
 #include "net/netstack.h"
-#include "dev/button-sensor.h"
+//#include "dev/button-sensor.h" [SIMONE] no need for button
 #include "dev/slip.h"
 #if NETSTACK_CONF_SDN == 1
 #include "net/sdn/control_agent.h"
@@ -58,7 +58,7 @@
 #include <string.h>
 #include <ctype.h>
 
-#define DEBUG 0
+#define DEBUG DEBUG_NONE
 #include "net/ip/uip-debug.h"
 
 static uip_ipaddr_t prefix;
@@ -360,7 +360,7 @@ print_local_addresses(void)
   int i;
   uint8_t state;
 
-  PRINTA("Server IPv6 addresses:\n");
+  PRINTA("[BR] Server IPv6 addresses:\n");
   for(i = 0; i < UIP_DS6_ADDR_NB; i++) {
     state = uip_ds6_if.addr_list[i].state;
     if(uip_ds6_if.addr_list[i].isused &&
@@ -399,13 +399,14 @@ set_prefix_64(uip_ipaddr_t *prefix_64)
     rpl_set_prefix(dag, &prefix, 64);
     PRINTF("created a new RPL dag\n");
   }
-#if NETSTACK_CONF_SDN == 1
+	//Commented out by SIMONE
+//#if NETSTACK_CONF_SDN == 1
   //I've tried to put this function call into the sdn module initialization function
   //which is called by the netstack module at startup time.
   //But it seems to not work correctly, the coap engine sends bad formatted request to the server
   //for instance with no source Coap port
-  control_agent_init();         
-#endif
+ // control_agent_init();         
+//#endif
 }
 /*---------------------------------------------------------------------------*/
 PROCESS_THREAD(border_router_process, ev, data)
@@ -421,10 +422,16 @@ PROCESS_THREAD(border_router_process, ev, data)
  */
   prefix_set = 0;
   NETSTACK_MAC.off(0);
+	
+  //Added by SIMONE
+  #if NETSTACK_CONF_SDN == 1
+   control_agent_init();
+  #endif
+  //End adding
 
   PROCESS_PAUSE();
 
-  SENSORS_ACTIVATE(button_sensor);
+  //SENSORS_ACTIVATE(button_sensor); [SIMONE] No need for button sensor
 
   PRINTF("RPL-Border router started\n");
 #if 0
@@ -453,10 +460,12 @@ PROCESS_THREAD(border_router_process, ev, data)
 
   while(1) {
     PROCESS_YIELD();
+	/* [SIMONE] No need for button press detection
     if (ev == sensors_event && data == &button_sensor) {
       PRINTF("Initiating global repair\n");
       rpl_repair_root(RPL_DEFAULT_INSTANCE);
     }
+	*/
   }
 
   PROCESS_END();

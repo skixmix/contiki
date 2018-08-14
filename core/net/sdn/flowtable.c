@@ -21,7 +21,6 @@
 #define DEBUG 1
 #if DEBUG
 #include <stdio.h>
-#define PRINT_LLADDR(addr) printf("%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x", ((uint8_t *)addr)[0], ((uint8_t *)addr)[1], ((uint8_t *)addr)[2], ((uint8_t *)addr)[3], ((uint8_t *)addr)[4], ((uint8_t *)addr)[5], ((uint8_t *)addr)[6], ((uint8_t *)addr)[7])
 #define PRINTF(...) printf(__VA_ARGS__)
 #else
 #define PRINTF(...)
@@ -36,11 +35,43 @@ MEMB(bytes4_memb, bytes4_t, NUM_BYTES_4_BLOCKS);
 MEMB(bytes8_memb, bytes8_t, NUM_BYTES_8_BLOCKS);
 MEMB(bytes16_memb, bytes16_t, NUM_BYTES_16_BLOCKS);
 
+
+//Function by Simone
 /*
-uint8_t clean_up_oldest_entry(){
+void clean_up_oldest_entry(){
     //TODO: find the oldest flow table entry and clean up its space
+    printf("--> Trying to free up some space\n");
+    //Search for the entry with stats->count that is the smallest (count indicates the # of times an entry was utilized)
+    uint16_t minimum_count;
+    int start = 1;
+    entry_t* candidate_entry;
+    entry_t* entry;
+    
+    for(entry = getFlowTableHead(); entry != NULL; entry = entry->next){
+        if(entry->priority > 1){
+          if(start == 1){ //start
+              minimum_count = (&entry->stats)->count;
+              printf("START Count: %d | Priority: %d\n", minimum_count, entry->priority);
+              start = 0;
+          }
+
+          printf("Count: %d | Priority: %d\n", minimum_count, entry->priority);
+
+          if(minimum_count >= (&entry->stats)->count){
+              printf("Updating minimum count -> %d\n", (&entry->stats)->count);
+              minimum_count = (&entry->stats)->count; //Update minimum count
+              candidate_entry = entry;
+          }
+       }
+    }
+    //Now we have the entry to delete
+    printf(">> Current minimum count: %d\n", minimum_count); 
+    deallocate_entry(candidate_entry); //Deallocate the entry
+    printf(">> Entry deallocated\n");
 }
 */
+
+
 void flowtable_init(){
     list_init(flowTable);
     memb_init(&entries_memb);
@@ -110,7 +141,8 @@ void deallocate_entry(entry_t* entry){
 void entry_init(entry_t *e){
     memset(e, 0, sizeof(*e));
     e->stats.ttl = 0;
-    e->stats.count = 0; 
+    e->stats.count = 0;
+    
     LIST_STRUCT_INIT(e, rules);
     LIST_STRUCT_INIT(e, actions);
     e->priority = 0;
@@ -121,7 +153,8 @@ entry_t* allocate_entry(){
 
     e = memb_alloc(&entries_memb);
     if(e == NULL) {
-        //clean_up_oldest_entry();
+        //clean_up_oldest_entry(); //Uncommented by Simone
+        printf(">> Now retrying to allocate entry\n");
         e = memb_alloc(&entries_memb);
         if(e == NULL) {
             PRINTF("[FLT]: Failed to allocate an entry\n");
@@ -431,7 +464,7 @@ void print_entry(entry_t* e) {
         print_action(a);
         PRINTF(";");
     } 
-    PRINTF("}[%d %d]\n", e->stats.ttl, e->stats.count);   
+    PRINTF("}[TTL: %d COUNT: %d]\n", e->stats.ttl, e->stats.count);   
 #endif
 }
 
@@ -679,17 +712,24 @@ uint8_t* install_flow_entry_from_cbor(cn_cbor* flowEntry){
         }
     }
     /*--------------------------STAT-----------------------------*/
-#if SDN_STATS == 1
-    PRINT_STAT("\nF_E_");
+	#if PrintStatistics == 1
+	   printf("FTable_Entry_Installed\n");
+	#endif
+	/*
+#if PrintStatistics == 1
+    printf("FTable_Entry_Install_");
     if(rule->size == 64)
         PRINT_STAT_LLADDR(rule->value.bytes);
     else if(rule->size == 16)
         printf("%02x:%02x", rule->value.bytes[6], rule->value.bytes[7]);            
-    PRINT_STAT("->");
-    if(action->size = 64 && action->size != 0)
+	
+    if(action->size = 64 && action->size != 0){
+		printf("_");
         PRINT_STAT_LLADDR(action->value.bytes);
-    PRINT_STAT("\n");
+	}
+    printf("\n");
 #endif
+*/
     /*-----------------------------------------------------------*/
     PRINTF("\nInstalled: ");
 #if DEBUG == 1
@@ -709,78 +749,59 @@ uint8_t* install_flow_entry_from_cbor(cn_cbor* flowEntry){
     }
 }
 
-void flowtable_test(){
+void set_up_br_rule(){
     uint8_t addr_tunslip[8]  = {0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01};
-    uint8_t addr_udpServer[8]  = {0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02};
-    uint8_t addr_1[8]  = {0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0xc1, 0x71};	//020000000000c171
-    //uint8_t addr_1[8]  = {0x00, 0x12, 0x74, 0x00, 0x16, 0xc0, 0x77, 0xed};
-    //uint8_t addr_1[8]  = {0xc1, 0x0c, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01};
-    uint8_t multicastMesh = 0x80;
+    //uint8_t addr_udpServer[8]  = {0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02};
     rule_t* rule;
     action_t* action;
     entry_t* entry;
     
-    //Drop rule for multicast packets
+    /*UDP Server, not present in my configuration
+    entry = create_entry(1);
+    rule = create_rule(MH_DST_ADDR, 0, 64, EQUAL, addr_udpServer);
+    action= create_action(TO_UPPER_L, NO_FIELD, 0, 0, NULL);
+    add_rule_to_entry(entry, rule);    
+    add_action_to_entry(entry, action);
+    add_entry_to_ft(entry);
+    */
+    entry = create_entry(2);
+    rule = create_rule(MH_DST_ADDR, 0, 64, EQUAL, addr_tunslip); //If it is for tunslip MAC
+    action= create_action(TO_UPPER_L, NO_FIELD, 0, 0, NULL); //Accept the packet and send to upper layer
+    add_rule_to_entry(entry, rule);    
+    add_action_to_entry(entry, action);
+    add_entry_to_ft(entry);
+    printf("BR-Tunslip mapping rule added\n");
+    
+    //Drop if source == BR and dest == Tunslip
+   /* entry = create_entry(1);
+    rule = create_rule(MH_DST_ADDR, 0, 64, EQUAL, addr_tunslip);
+    add_rule_to_entry(entry, rule);    
+    rule = create_rule(MH_SRC_ADDR, 0, 64, EQUAL, &linkaddr_node_addr);
+    add_rule_to_entry(entry, rule);  
+    action= create_action(DROP, NO_FIELD, 0, 0, NULL);
+    add_action_to_entry(entry, action);
+    add_entry_to_ft(entry);
+    printf("Drop rule for BR -> Tunlip packets added\n");
+    */ 
+}
+
+void flowtable_test(){
+	uint8_t multicastMesh = 0x80;
+    rule_t* rule;
+    action_t* action;
+    entry_t* entry;
+    
+    //Drop rule for multicast packets (per tutti i nodi, ma serve?)
+    /*
     entry = create_entry(80);
     rule = create_rule(MH_DST_ADDR, 0, 3, EQUAL, &multicastMesh);
     action= create_action(DROP, NO_FIELD, 0, 0, NULL);
     add_rule_to_entry(entry, rule);    
     add_action_to_entry(entry, action);
     add_entry_to_ft(entry);
-    PRINTF("NODE MAC ADDRESS: ");
-    PRINT_LLADDR(&linkaddr_node_addr);
-    PRINTF("\n");
-    
-    if(memcmp(&linkaddr_node_addr, addr_1, 8) == 0){
-        
-        entry = create_entry(1);
-        rule = create_rule(MH_DST_ADDR, 0, 64, EQUAL, addr_udpServer);
-        action= create_action(TO_UPPER_L, NO_FIELD, 0, 0, NULL);
-        add_rule_to_entry(entry, rule);    
-        add_action_to_entry(entry, action);
-        add_entry_to_ft(entry);
-        
-        entry = create_entry(1);
-        rule = create_rule(MH_DST_ADDR, 0, 64, EQUAL, addr_tunslip);
-        action= create_action(TO_UPPER_L, NO_FIELD, 0, 0, NULL);
-        add_rule_to_entry(entry, rule);    
-        add_action_to_entry(entry, action);
-        add_entry_to_ft(entry);
-        
-    }
-    
-    if(memcmp(&linkaddr_node_addr, addr_1, 8) != 0){                            //For every node except the root
-        /*Assumption: the DODAG root's MAC address is known.
-         * Without this static rule it is impossible to communicate with the external
-         * virtual interface (FD00::1), called "tunslip", attached to the border router.
-         * The problem comes from the fact that the border router takes the 
-         * IP prefix from this virtual interface, and it uses that prefix (FD00) 
-         * inside the RPL context.
-         * For this reason, the IP address of the tunslip host is recognized by the
-         * nodes as an on-link address, whereas the host is off-link.
-         * Thus the nodes send packets using the tunslip host's mac address 
-         * as final destination in the Mesh Header, though finding no matching
-         * rules inside the flow table, preventing the nodes to communicate 
-         * with external hosts, and one of them could be the SDN Controller.
-         * To fix this issue single static rule is required: if the final address
-         * of the mesh header is equal to the tunslip host's one then, modify it 
-         * with the mac address of the dodag root, and continue to scan the 
-         * flow table.
-         * This way, we can exploit the dynamic rules added through RPL
-         * in order to send packets toward the border router and, at the same 
-         * time, avoiding inserting static paths. 
-         */
-
-        entry = create_entry(1);
-        rule = create_rule(MH_DST_ADDR, 0, 64, EQUAL, addr_tunslip);
-        add_rule_to_entry(entry, rule);
-        action= create_action(MODIFY, MH_DST_ADDR, 0, 64, addr_1);
-        add_action_to_entry(entry, action);
-        action= create_action(CONTINUE, NO_FIELD, 0, 0, NULL);
-        add_action_to_entry(entry, action);
-        add_entry_to_ft(entry);
-
-    }
-    //print_flowtable();
+    printf("Drop rule for multicast packets added\n");
+    */
+    //Print the flow table
+    print_flowtable();
 }
 

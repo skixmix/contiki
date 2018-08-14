@@ -52,6 +52,12 @@
 #include "net/packetbuf.h"
 #include "net/ipv6/uip-ds6-nbr.h"
 
+//SDN (by Simone)
+#if NETSTACK_CONF_SDN == 1
+	#include "net/sdn/control_agent.h"
+#endif
+//SDN
+
 #define DEBUG DEBUG_NONE
 #include "net/ip/uip-debug.h"
 
@@ -118,7 +124,7 @@ uip_ds6_nbr_add(const uip_ipaddr_t *ipaddr, const uip_lladdr_t *lladdr,
   }
 }
 
-/*---------------------------------------------------------------------------*/
+/*--------------------------------Remove Neighbor from table -------------------------------------------*/
 int
 uip_ds6_nbr_rm(uip_ds6_nbr_t *nbr)
 {
@@ -246,7 +252,13 @@ uip_ds6_link_neighbor_callback(int status, int numtx)
 /** Periodic processing on neighbors */
 void
 uip_ds6_neighbor_periodic(void)
-{
+{ 
+  //Added for SDN (by Simone)
+  #if NETSTACK_CONF_SDN == 1
+	int removed_neighbors = 0;
+  #endif
+  //SDN
+	
   uip_ds6_nbr_t *nbr = nbr_table_head(ds6_neighbors);
   while(nbr != NULL) {
     switch(nbr->state) {
@@ -283,6 +295,10 @@ uip_ds6_neighbor_periodic(void)
     case NBR_INCOMPLETE:
       if(nbr->nscount >= UIP_ND6_MAX_MULTICAST_SOLICIT) {
         uip_ds6_nbr_rm(nbr);
+		#if NETSTACK_CONF_SDN == 1
+		  removed_neighbors = removed_neighbors + 1;
+		  remove_sdn_rule(uip_ds6_nbr_get_ll(nbr));
+	    #endif
       } else if(stimer_expired(&nbr->sendns) && (uip_len == 0)) {
         nbr->nscount++;
         PRINTF("NBR_INCOMPLETE: NS %u\n", nbr->nscount);
@@ -308,6 +324,10 @@ uip_ds6_neighbor_periodic(void)
           }
         }
         uip_ds6_nbr_rm(nbr);
+		#if NETSTACK_CONF_SDN == 1
+		  removed_neighbors = removed_neighbors + 1;
+		  remove_sdn_rule(uip_ds6_nbr_get_ll(nbr));
+	    #endif
       } else if(stimer_expired(&nbr->sendns) && (uip_len == 0)) {
         nbr->nscount++;
         PRINTF("PROBE: NS %u\n", nbr->nscount);
@@ -320,6 +340,12 @@ uip_ds6_neighbor_periodic(void)
     }
     nbr = nbr_table_next(ds6_neighbors, nbr);
   }
+	//SDN
+	#if NETSTACK_CONF_SDN == 1
+	  if(removed_neighbors > 0){
+		  printf("Removed %d neighbors\n", removed_neighbors);
+	  }
+	#endif
 }
 /*---------------------------------------------------------------------------*/
 uip_ds6_nbr_t *

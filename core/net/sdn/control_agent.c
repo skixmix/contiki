@@ -7,8 +7,7 @@
 
 #include "net/sdn/control_agent.h"
 
-
-#define SDN_STATS 0
+#define SDN_STATS 1
 #if SDN_STATS
 #include <stdio.h>
 #define PRINT_STAT(...) printf(__VA_ARGS__)
@@ -39,23 +38,24 @@ static pending_request_t pending_requests_array[MAX_REQUEST];
 uip_ipaddr_t controller_ipaddr;
 
 #define LOCAL_PORT      UIP_HTONS(COAP_DEFAULT_PORT + 1)
-#define REMOTE_PORT     UIP_HTONS(COAP_DEFAULT_PORT)
-#define SERVER_NODE(ipaddr)   uip_ip6addr(ipaddr, 0xfd00, 0, 0, 0, 0, 0, 0, 0x0001) 
+#define REMOTE_PORT     UIP_HTONS(COAP_DEFAULT_PORT) //COAP_DEFAULT_PORT = 5683
 
 #define URI_QUERY_MAC_ADDR(buffer, addr) sprintf(buffer,"?mac=%02x%02x%02x%02x%02x%02x%02x%02x", ((uint8_t *)addr)[0], ((uint8_t *)addr)[1], ((uint8_t *)addr)[2], ((uint8_t *)addr)[3], ((uint8_t *)addr)[4], ((uint8_t *)addr)[5], ((uint8_t *)addr)[6], ((uint8_t *)addr)[7])
 
-/*
-#define URI_QUERY_ALL_PACKET(buffer, sdr, rcv) sprintf(buffer,"?type=all&tx=%02x%02x%02x%02x%02x%02x%02x%02x&rx=%02x%02x%02x%02x%02x%02x%02x%02x", \
+
+
+/*#define URI_QUERY_ALL_PACKET(buffer, sdr, rcv) sprintf(buffer,"?type=all&tx=%02x%02x%02x%02x%02x%02x%02x%02x&rx=%02x%02x%02x%02x%02x%02x%02x%02x", \
                                                         ((uint8_t *)sdr)[0], ((uint8_t *)sdr)[1], ((uint8_t *)sdr)[2], ((uint8_t *)sdr)[3], ((uint8_t *)sdr)[4], ((uint8_t *)sdr)[5], ((uint8_t *)sdr)[6], ((uint8_t *)sdr)[7], \
                                                         ((uint8_t *)rcv)[0], ((uint8_t *)rcv)[1], ((uint8_t *)rcv)[2], ((uint8_t *)rcv)[3], ((uint8_t *)rcv)[4], ((uint8_t *)rcv)[5], ((uint8_t *)rcv)[6], ((uint8_t *)rcv)[7])
-*/
 
+*/
 #define URI_QUERY_ALL_PACKET(buffer, addr) sprintf(buffer,"?type=all&mac=%02x%02x%02x%02x%02x%02x%02x%02x", ((uint8_t *)addr)[0], ((uint8_t *)addr)[1], ((uint8_t *)addr)[2], ((uint8_t *)addr)[3], ((uint8_t *)addr)[4], ((uint8_t *)addr)[5], ((uint8_t *)addr)[6], ((uint8_t *)addr)[7])
 
 static uint8_t payload[MAX_DIM_PAYLOAD];
 static char uri_query[50];
 static clock_time_t topology_update_intervals[3];
 static int topology_update_index;
+//static int topology_up_counter; //Contatore per la topology update
 
 
 void start_request(void){
@@ -92,6 +92,37 @@ request_t* advance_ring_buf(){
     return NULL;
 }
 
+
+//Called from uip-ds6-nbr.c when removing a neighbor from the table (by Simone)
+void remove_sdn_rule (const linkaddr_t *addr){
+    rule_t* rule;
+    action_t* action;
+    entry_t* entry;
+    if(addr == NULL)
+        return;
+    
+    //Create the flow entry to remove
+    entry = create_entry(60);
+    if(entry == NULL)
+        return;
+    rule = create_rule(MH_DST_ADDR, 0, 64, EQUAL, addr);
+    if(rule == NULL){
+        deallocate_entry(entry);
+        return;
+    }
+    action= create_action(FORWARD, NO_FIELD, 0, 64, addr);
+    if(action == NULL){
+        deallocate_entry(entry);
+        deallocate_rule(rule);
+        return;
+    }
+    add_rule_to_entry(entry, rule);
+    add_action_to_entry(entry, action);
+ 	remove_entry(entry);  
+    deallocate_entry(entry);   
+	printf("DS6_CALLBACK_SDN: Removed neighbor entry from flow table as it is now unreachable\n");
+}
+
 //Called from the RPL module when it chooses a (new) parent
 void sdn_rpl_callback_parent_switch(rpl_parent_t *old, rpl_parent_t *new){
     uint8_t addrDim;
@@ -100,15 +131,17 @@ void sdn_rpl_callback_parent_switch(rpl_parent_t *old, rpl_parent_t *new){
     rule_t* rule;
     action_t* action;
     entry_t* entry;
+	uint8_t addr_tunslip[8]  = {0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01};
     
     
     //Check if there was an old parent
     if(old != NULL){
+		printf(">> Removing old parent\n");
         //If so, we must remove its entry from the flow table
         extractIidFromIpAddr(&llAddrParent, rpl_get_parent_ipaddr(old), &addrDim);
         extractIidFromIpAddr(&llAddrRoot, &old->dag->dag_id, &addrDim);
         
-        entry = create_entry(70);
+        entry = create_entry(2);
         if(entry == NULL)
             return;
         rule = create_rule(MH_DST_ADDR, 0, 64, EQUAL, &llAddrRoot);
@@ -131,54 +164,69 @@ void sdn_rpl_callback_parent_switch(rpl_parent_t *old, rpl_parent_t *new){
         PRINTF(" to root: ");
         PRINTLLADDR(&llAddrRoot);    
         PRINTF("\n");
-        
-        PRINT_STAT("\nCTR_RPL_REM-");
-        PRINT_STAT_LLADDR(&llAddrParent);
-        PRINT_STAT("\n");
+	
+		//Remove also tunslip rule (if any)
+		rule_t* tunslip_rule1;
+        action_t* tunslip_action1;
+        entry_t* tunslip_entry1;
+		
+		tunslip_entry1 = create_entry(1);
+        tunslip_rule1 = create_rule(MH_DST_ADDR, 0, 64, EQUAL, addr_tunslip); //If tunslip mac
+        add_rule_to_entry(tunslip_entry1, tunslip_rule1);
+        tunslip_action1 = create_action(FORWARD, NO_FIELD, 0, 64, &llAddrParent); //Forward to parent
+        add_action_to_entry(tunslip_entry1, tunslip_action1);
+		//Remove entry
+		remove_entry(tunslip_entry1);  
+		deallocate_entry(tunslip_entry1);
     }
     
     
     //If the node has selected a new parent, add the rule how to reach 
     //the root of the DODAG into the flow table
     if(new != NULL){
+		printf("Node has selected a new parent, adding rule to reach the root of DODAG\n");
         extractIidFromIpAddr(&llAddrParent, rpl_get_parent_ipaddr(new), &addrDim);
         extractIidFromIpAddr(&llAddrRoot, &new->dag->dag_id, &addrDim);
-
-	PRINTF("Control Agent: added parent: ");
-	PRINTLLADDR(&llAddrParent);
-	PRINTF(" to root: ");
-	PRINTLLADDR(&llAddrRoot);    
-	PRINTF("\n");
         
-        entry = create_entry(70);
-        if(entry == NULL){
-	    PRINTF("Control Agent: failed to create flow entry\n");
+        entry = create_entry(2);
+        if(entry == NULL)
             return;
-	}
         rule = create_rule(MH_DST_ADDR, 0, 64, EQUAL, &llAddrRoot);
         if(rule == NULL){
             deallocate_entry(entry);
- 	    PRINTF("Control Agent: failed to create rule\n");
             return; 
         }
         action= create_action(FORWARD, NO_FIELD, 0, 64, &llAddrParent);
         if(action == NULL){
             deallocate_entry(entry);
             deallocate_rule(rule);
-	    PRINTF("Control Agent: failed to create action\n");
             return; 
         }
         add_rule_to_entry(entry, rule);
         add_action_to_entry(entry, action);
         add_entry_to_ft(entry);
-
-	
+        printf(">> Parent rule allocated correctly {If dest is ");
+		PRINTLLADDR(&llAddrRoot);
+		printf(" => send to ");
+		PRINTLLADDR(&llAddrParent); 
+	    printf("}\n");
+		
+		//Now we need to set the tunslip rule: if the address MAC is tunslip, forward to parent => we get to the root!
+		//This is needed because of the fact that for example a ping6 is executed through tunslip, so the destination the node will respond to
+		//will be onlink and will have the tunslip mac address associated.
+		rule_t* tunslip_rule;
+        action_t* tunslip_action;
+        entry_t* tunslip_entry;
+		
+		tunslip_entry = create_entry(1);
+		tunslip_rule = create_rule(MH_DST_ADDR, 0, 64, EQUAL, addr_tunslip); //If tunslip mac
+		add_rule_to_entry(tunslip_entry, tunslip_rule);
+		tunslip_action= create_action(FORWARD, NO_FIELD, 0, 64, &llAddrParent); //Forward to parent
+		add_action_to_entry(tunslip_entry, tunslip_action);
+		add_entry_to_ft(tunslip_entry);
     }
-    
-    
-    PRINT_STAT("\nCTR_RPL_ADD-");
-    PRINT_STAT_LLADDR(&llAddrParent);
-    PRINT_STAT("\n");
+	
+	//print_flowtable();
 }
 
 //Called from the link-stat module when it receive a message from a neighbor
@@ -207,21 +255,21 @@ void sdn_callback_neighbor(const linkaddr_t *addr){
     }
     add_rule_to_entry(entry, rule);
     add_action_to_entry(entry, action);
-    entry->stats.ttl = 60*10*3;       // 30 minutes
+    entry->stats.ttl = 60 * 20;       // 20 Minutes
     //Check if this neighbor already exits into the flow table
     app = find_entry(entry);
     if(app != NULL){
         //We can't confuse with the rule installed by RPL, and it may happen if the root is our neighbour
         if(app->stats.ttl != 0){
             //It exists, so just update the ttl field
-            app->stats.ttl = 60*10*3;      // 30 minutes
+            app->stats.ttl = 60 * 20;      // Refresh to 20 minutes
         }
         deallocate_entry(entry);
     }
     else{
         //It doesn't exist, so add it in to the flow table
         add_entry_to_ft(entry);
-        PRINTF("Neighbour found: installed ");
+        PRINTF("Neighbour found: installed in the flow table");
         print_entry(entry);
         PRINTF("\n");
     }    
@@ -240,7 +288,7 @@ static void callback_decrement_ttl(void *ptr){
         if(entry->stats.ttl == 0){
             app = entry;
             entry = entry->next;
-            PRINTF("EXPIRED: ");
+            PRINTF("EXPIRED Flow Table entry: ");
 #if DEBUG == 1
             print_entry(app);
 #endif
@@ -255,13 +303,14 @@ static void callback_decrement_ttl(void *ptr){
 //It returns -1 if there's no free place, or if the mesh address is already contained
 //Otherwise, when the request was successfully added, it returns the array index
 int add_pending_request(linkaddr_t* mesh_destination){
+	printf("Trying to add coap request\n");
     int i, free_slot = -1; 
     //Clear the exipred request
     for(i = 0; i < MAX_REQUEST; i++){
         if(pending_requests_array[i].valid && timer_expired(&pending_requests_array[i].lifetime_timer)){   //Valid and expired -> remove it
-            PRINTF("Request for ");
+            printf("Request for ");
             PRINTLLADDR(&pending_requests_array[i].mesh_address);
-            PRINTF(" has expired\n");
+            printf(" has expired\n");
             pending_requests_array[i].valid = 0;
             if(pending_requests_array[i].payload != NULL)
                 queuebuf_free(pending_requests_array[i].payload);
@@ -271,25 +320,27 @@ int add_pending_request(linkaddr_t* mesh_destination){
     for(i = 0; i < MAX_REQUEST; i++){
         if(pending_requests_array[i].valid && linkaddr_cmp(mesh_destination, &pending_requests_array[i].mesh_address) != 0){   
             //A request for mesh_destination address has already been sent
-            PRINTF("There is already a request for ");
+            printf(">>> There is already a request for ");
             PRINTLLADDR(&pending_requests_array[i].mesh_address);
-            PRINTF("\n");
+            printf("\n");
             return -1;
         }
         if(!pending_requests_array[i].valid)
             free_slot = i;
     }
-    if(free_slot == -1) //No free slot for this request
+    if(free_slot == -1){ //No free slot for this request
+		printf(">> There is no free slot to send a request, aborting coap message\n");
         return -1;
+	}
     //At this point it means that there's no a request with mesh_destination address
     //Thus, add it at the first free slot, set the timer and return the index
     linkaddr_copy(&pending_requests_array[free_slot].mesh_address, mesh_destination);
     pending_requests_array[free_slot].valid = 1;
-    timer_set(&pending_requests_array[free_slot].lifetime_timer, CLOCK_SECOND * COAP_MAX_RETRANSMIT * COAP_RESPONSE_TIMEOUT);
+    timer_set(&pending_requests_array[free_slot].lifetime_timer, CLOCK_SECOND * (COAP_MAX_RETRANSMIT * COAP_RESPONSE_TIMEOUT / 10)); //4 seconds
     pending_requests_array[free_slot].payload = NULL;
-    PRINTF("Set pending req for %u seconds with: ", COAP_MAX_RETRANSMIT * COAP_RESPONSE_TIMEOUT);
+    printf("Set pending req for %u seconds with: ", COAP_MAX_RETRANSMIT * COAP_RESPONSE_TIMEOUT / 10); 
     PRINTLLADDR(&pending_requests_array[free_slot].mesh_address);
-    PRINTF("\n");
+    printf("\n");
     return free_slot;
 }
 
@@ -298,9 +349,9 @@ void remove_pending_req(linkaddr_t* mesh_destination){
     for(i = 0; i < MAX_REQUEST; i++){
         if(pending_requests_array[i].valid && linkaddr_cmp(mesh_destination, &pending_requests_array[i].mesh_address) != 0){   
             //A response for mesh_destination address has arrived
-            PRINTF("Entry for ");
+            printf("Entry for ");
             PRINTLLADDR(&pending_requests_array[i].mesh_address);
-            PRINTF(" has arrived, remove it\n");
+            printf(" has arrived, remove it\n");
             pending_requests_array[i].valid = 0;
             if(pending_requests_array[i].payload != NULL)
                 queuebuf_free(pending_requests_array[i].payload);
@@ -310,6 +361,7 @@ void remove_pending_req(linkaddr_t* mesh_destination){
 }
 
 void handleTableMiss(linkaddr_t* L2_receiver, linkaddr_t* L2_sender, uint8_t* ptr_to_pkt, uint16_t pkt_dim){
+	printf("Handling a Table Miss, requesting information to SDN-Controller\n");
     request_t* req = NULL;
     int pending_index = 0;
     linkaddr_t* nodeAddr = &linkaddr_node_addr;
@@ -335,24 +387,25 @@ void handleTableMiss(linkaddr_t* L2_receiver, linkaddr_t* L2_sender, uint8_t* pt
         queuebuf_free(q);
         return;
     }
-    
+	    
     //Set type of message: CON and POST
     coap_init_message(&req->req_packet, COAP_TYPE_CON, COAP_POST, 0);
     //Set the target resource 
-    coap_set_header_uri_path(&req->req_packet, "Flow_engine");
-    //Set the query parameter: "?type=all&mac=<sender's mac address>"
-    //URI_QUERY_ALL_PACKET(uri_query, L2_sender, L2_receiver);
-    URI_QUERY_ALL_PACKET(uri_query, nodeAddr);
+    coap_set_header_uri_path(&req->req_packet, "fe");
+	
+    //Set the query parameter: 
+    //URI_QUERY_ALL_PACKET (uri_query, L2_sender, L2_receiver); //"?type=all&tx=transmitter&rx=receiver"
+	URI_QUERY_ALL_PACKET (uri_query, nodeAddr); //"?type=all&mac=<sender's mac address>"
+	
     coap_set_header_uri_query(&req->req_packet, uri_query);        
     //Set the type of request needed to the working process in order to select the right callback function
-    req->type = TABLE_MISS;
-    //TODO: insert L2 sender address and L2 receiver address into the payload of the POST request
-    
+    req->type = TABLE_MISS;    
     //Set payload type and the actual content
     //memcpy(payload, ptr_to_pkt, pkt_dim);
     coap_set_payload(&req->req_packet, queuebuf_dataptr(q), queuebuf_datalen(q));
     //queuebuf_free(q);                     //TODO: this function is supposed to be called after the second process sends the request
-    start_request();                        //But it seems to cause an segmentation fault
+    start_request();                        //But it seems to cause a segmentation fault
+	printf("--> actually generating table miss request [packet size: %u, max_coap: %d]\n", queuebuf_datalen(q), COAP_MAX_BLOCK_SIZE);
 }
 
 uint8_t computeNumOfNeighbours(){
@@ -362,10 +415,13 @@ uint8_t computeNumOfNeighbours(){
         return 0;
     for(nbr = nbr_table_head(ds6_neighbors); nbr != NULL; nbr = nbr_table_next(ds6_neighbors, nbr)) {
         num_of_neigh++;
+		if(num_of_neigh == NBR_TABLE_CONF_MAX_NEIGHBORS)
+			break;
     }
     return num_of_neigh;
 }
 
+//Build the topology update payload
 uint8_t prepare_payload_top_update(){
     uip_ds6_nbr_t *nbr;
     uip_lladdr_t *lladdr;
@@ -381,31 +437,38 @@ uint8_t prepare_payload_top_update(){
     //Get the number of neighbours, if it is 0 don't send any update to the Controller then
     num_of_neigh = computeNumOfNeighbours();
     if(num_of_neigh == 0){
-        //DEBUG
-        PRINTF("Control agent: 0 NEIGHBOURS\n");
+        printf("Control agent: 0 NEIGHBOURS --> Not sending topology update\n");
         return 0;
     }
     //Set the state information regarding the sending node  
-    header[1] = 1;                  //Version of the update structure
-    header[3] = 60 << 8;                 //Battery level
-    header[4] = 60 & ((1 << 8) - 1);
+    header[1] = 1;                  							//Version of the update structure
+    header[3] = 1 << 8;                 						//Battery level (on testbed nodes have no battery constraints)
+    header[4] = 1 & ((1 << 8) - 1);	
     /*SENSORS_ACTIVATE(battery_sensor);
-    header[3] = battery_sensor.value(0) << 8;                 //Battery level
+    header[3] = battery_sensor.value(0) << 8;                 	//Battery level (not for cooja)
     header[4] = battery_sensor.value(0) & ((1 << 8) - 1);
-    SENSORS_DEACTIVATE(battery_sensor);*/
-    header[6] = 30;                 //Queue utilization
-    //Set the Cbor major type "Array" with the number of items
-    header[7] = 0xa0 | num_of_neigh;
-    //Copy the first part of the POST payload
+    SENSORS_DEACTIVATE(battery_sensor);*/	
+    header[6] = 30;                 							//Queue utilization
+    header[7] = 0xa0 | num_of_neigh;							//Set the Cbor major type "Array" with the number of items
+    
+	//Copy the first part of the POST payload
     memcpy(payload, header, sizeof(header));
     payload_dim = sizeof(header);
     
     //Scan the neighbours table 
-    for(nbr = nbr_table_head(ds6_neighbors); nbr != NULL; nbr = nbr_table_next(ds6_neighbors, nbr)) {
+	uint8_t i = 0;
+	
+	//printf("Lista vicini (%u): ", num_of_neigh);
+	
+    for(nbr = nbr_table_head(ds6_neighbors); nbr != NULL; nbr = nbr_table_next(ds6_neighbors, nbr)) {		
         //Get the neighbour's MAC address
         lladdr = uip_ds6_nbr_get_ll(nbr); 
+		
+		//PRINTLLADDR(lladdr);
+		//printf(", ");
+		
         //And its stats
-	stats = link_stats_from_lladdr(lladdr);
+	    stats = link_stats_from_lladdr(lladdr);
         rssi = (int16_t)-1 - stats->rssi;                   //This is needed because of the Cbor negative integer representation
         etx = stats->etx;
         //Set the neighbour's MAC address into the Cbor structure
@@ -418,35 +481,39 @@ uint8_t prepare_payload_top_update(){
         //Copy the Cbor structure into the POST payload
         memcpy(payload+payload_dim, neighbour, sizeof(neighbour));
         payload_dim += sizeof(neighbour);
+		
+		i++;
+		if(i == NBR_TABLE_CONF_MAX_NEIGHBORS)
+			break;
     }
-    //DEBUG
-    /*
-    int i;
-    printf("\nCBOR: ");
-    for(i = 0; i < MAX_DIM_PAYLOAD; i++)
-        printf("%02x", payload[i]);
-    printf("\n dim = %u\n", payload_dim);
-    */
+	
+	printf("\n");
+    printf("Topology update CBOR [%u neighbors], size: %u\n", num_of_neigh, payload_dim, COAP_MAX_BLOCK_SIZE);
     return payload_dim;
-    
 }
 
 static void topology_update(void *ptr){
+	
+	//Only 3 topology updates (warmup, 12 minutes)
+	/*if(topology_up_counter >= 3)
+	//	return;	
+	topology_up_counter = topology_up_counter + 1;
+	*/
+
+	printf("Sending topology update\n");
+	
     unsigned short delay = CLOCK_SECOND *(random_rand() % 30);
     request_t* req = NULL;
     linkaddr_t* nodeAddr = &linkaddr_node_addr;
     uint8_t payload_dim = 0;
     req = add_request();
-    //DEBUG
-    PRINTF("ADDED FLOW ENTRY: ");
-    print_flowtable();          //TODO: remove it when we are sure that the entire system works
-    PRINTF("\n");
-    //DEBUG
+	
     if(req != NULL){
+		printf("--> actually generating the topology update COAP\n");
         //Set type of message: CON and POST
         coap_init_message(&req->req_packet, COAP_TYPE_CON, COAP_POST, 0);
         //Set the target resource 
-        coap_set_header_uri_path(&req->req_packet, "Network");
+        coap_set_header_uri_path(&req->req_packet, "6lo");
         //Set the query parameter: "?mac=<node's mac address>"
         URI_QUERY_MAC_ADDR(uri_query, nodeAddr);
         coap_set_header_uri_query(&req->req_packet, uri_query);
@@ -458,6 +525,7 @@ static void topology_update(void *ptr){
         coap_set_payload(&req->req_packet, payload, payload_dim);   
     }    
     start_request();
+	printf("--> Starting topology update request\n");
     //ctimer_reset(&timer_topology);
     if(topology_update_index == 0){
         topology_update_index = 1;
@@ -470,6 +538,9 @@ static void topology_update(void *ptr){
 
 
 void control_agent_init(){
+	
+	//topology_up_counter = 0;
+	
     int i; 
     unsigned short delay = CLOCK_SECOND *(random_rand() % 30);
     topology_update_index = 0;
@@ -480,14 +551,23 @@ void control_agent_init(){
     ctimer_set(&timer_ttl, TTL_INTERVAL, callback_decrement_ttl, NULL);
     ctimer_set(&timer_topology, topology_update_intervals[topology_update_index] + delay, topology_update, NULL);
     flowtable_init();
-    flowtable_test();
+	
+	#if SINK == 1 //If this is the BR/Sink SDN Node
+	  set_up_br_rule();
+	#endif
+	
     //init pending request    
     for(i = 0; i < MAX_REQUEST; i++){
         pending_requests_array[i].valid = 0;
     }
-    SERVER_NODE(&controller_ipaddr);
+	
     ringbufindex_init(&requests_ringbuf, MAX_REQUEST);
     process_start(&coap_client_process, NULL);
+	
+	printf("Control agent init ok\n");
+	printf("My MAC address: ");
+    PRINTLLADDR(&linkaddr_node_addr);
+    printf("\n");
 }
 
 
@@ -500,8 +580,8 @@ void parse_table_miss_response(const uint8_t* chunk, int len){
         return;
     cb = cn_cbor_decode((const char*)chunk, len, &err);
     if(cb == NULL){
-        PRINTF("Control Agent: parsing Cbor payload has failed:");
-        PRINTF(" Err %u pos %i\n", err.err, err.pos);
+        printf("Control Agent: parsing Cbor payload has failed:");
+        printf(" Err %u pos %i\n", err.err, err.pos);
         return;
     }
     if(cb->type == CN_CBOR_ARRAY){
@@ -524,6 +604,7 @@ void parse_table_miss_response(const uint8_t* chunk, int len){
 
 
 void client_table_miss_handler(void *response){
+	printf(">> Received table miss response from controller\n");
     const uint8_t *chunk;
     int len;
     
@@ -532,26 +613,18 @@ void client_table_miss_handler(void *response){
     len = coap_get_payload(response, &chunk);
     if(len == 0)
         return;
-#if DEBUG == 1
-    int i;
-    printf("Table miss: ");
-    for (i = 0; i < len; i++)
-    {
-      printf("%02x", chunk[i]);
-    }
-    printf("\n");
-#endif
+	printf(">>> Parsing table miss response\n");
     parse_table_miss_response(chunk, len);
 }
 
 void client_topology_update_handler(void *response){
+  printf(">> Received topology update response from controller\n");
   const uint8_t *chunk;
   if(response == NULL)
       return;
   int len = coap_get_payload(response, &chunk);
   if(len == 0)
       return;
-  PRINTF("Topology update: %.*s", len, (char *)chunk);
 }
 
 void put_handler_flowtable(void* request, void* response, uint8_t *buffer, uint16_t preferred_size, int32_t *offset){    
@@ -577,8 +650,8 @@ void put_handler_flowtable(void* request, void* response, uint8_t *buffer, uint1
       
     cb = cn_cbor_decode((const char*)incoming, len, &err);
     if(cb == NULL){
-        PRINTF("Control Agent: parsing Cbor payload has failed:");
-        PRINTF(" Err %u pos %i\n", err.err, err.pos);
+        printf("Control Agent: parsing Cbor payload has failed:");
+        printf(" Err %u pos %i\n", err.err, err.pos);
         REST.set_response_status(response, REST.status.BAD_REQUEST);
         return;
     }
@@ -634,12 +707,13 @@ void get_handler(void* request, void* response, uint8_t *buffer, uint16_t prefer
 #if DEBUG == 1
     PRINTF("Received get on coap group resource\n");            
 #endif
-    
-    PRINT_STAT("\nCTR_RCV_GET");
-    uint8_t length = 60;
+    #if PrintStatistics == 1
+		printf("COAP_GET_RECEIVED\n");
+	#endif
+    uint8_t length = 40;
     char message[length];
 
-    sprintf(message, "Ciao a tutti, questa è una risorsa\n");
+    sprintf(message, "Ciao a tutti, questa e una risorsa\n");
     length = strlen(message);
     memcpy(buffer, message, length);
 
@@ -658,18 +732,27 @@ PROCESS_THREAD(coap_client_process, ev, data){
     /* receives all CoAP messages */
     //coap_init_engine();
     rest_init_engine();
-    rest_activate_resource(&resource_flow_table, "local_control_agent/flow_table");
-    rest_activate_resource(&resource_coap_group, "coap-group");
+    rest_activate_resource(&resource_flow_table, "lca/ft");
+    rest_activate_resource(&resource_coap_group, "cg");
+	
+	uip_ip6addr(&controller_ipaddr, 0x2001, 0x0db8, 0, 0xf101, 0, 0, 0, 0x0001);  //IP address of the controller (2001:0db8:0:f101::1), offlink
+	//uip_ip6addr(&controller_ipaddr, 0xfd00, 0, 0, 0, 0, 0, 0, 0x0001);
+	
+	printf("Controller IPv6 address: ");
+	PRINT6ADDR(&controller_ipaddr);
+	printf("\n");
+	
     while(1) {
         PROCESS_YIELD_UNTIL(ev == PROCESS_EVENT_POLL);
         while((req = get_ref_to_next_request()) != NULL){
             
             if(req != NULL){
                 if(req->type == TABLE_MISS){
+					printf("Table miss request sent correctly!\n");
                     COAP_BLOCKING_REQUEST(&controller_ipaddr, REMOTE_PORT, &req->req_packet, client_table_miss_handler);
                 }
                 else if(req->type == TOPOLOGY_UPDATE){
-                    PRINTF("TOPOLOGY UPDATE\n");
+                    printf("Topology update sent correctly\n");
                     COAP_BLOCKING_REQUEST(&controller_ipaddr, REMOTE_PORT, &req->req_packet, client_topology_update_handler);
                 }
                 advance_ring_buf();

@@ -368,7 +368,7 @@ static void broadcastSendPackets(void *ptr){
     broadcast_pkt_t* req;
     while((req = get_ref_to_next_broadcast()) != NULL){
         queuebuf_to_packetbuf(req->broadcast_packet);        
-        PRINTF("Datapath: Forward packet in broadcast\n");
+        printf("Datapath: Forward packet in broadcast\n");
         forward(); 
         advance_ring_buf_broadcast();
         queuebuf_free(req->broadcast_packet);
@@ -528,9 +528,10 @@ int processPacket(){
     const linkaddr_t* L2_sender, *L2_receiver;
     
     ptr_to_packet = packetbuf_dataptr();
-    L2_sender = packetbuf_addr(PACKETBUF_ADDR_SENDER);
-    L2_receiver = packetbuf_addr(PACKETBUF_ADDR_RECEIVER);
-    PRINTF("MATCH PACKET:\n");
+    L2_sender = packetbuf_addr(PACKETBUF_ADDR_SENDER); //Sender MAC
+    L2_receiver = packetbuf_addr(PACKETBUF_ADDR_RECEIVER); //Receiver MAC
+    
+    printf("-> Trying to MATCH PACKET in flow table:\n");
     //Scan the entire flow table, one entry at a time 
     for(entry = getFlowTableHead(); entry != NULL; entry = entry->next){
         continue_flag = 0;
@@ -544,7 +545,6 @@ int processPacket(){
             result = evaluateRule(rule);
             if(result == 0) //If the rule is not satisfied, go to the next entry
                 break;
-            PRINTF("MATCH!\n");
         }
         if(rule != NULL)    //This means that at least one rule has not been satisfied
             continue;
@@ -557,6 +557,7 @@ int processPacket(){
             if(action->type == DROP)
                 break;
         }
+        printf("Entry match!\n");
         updateStat(&entry->stats);
         //Unless there was a "continue" action, stop scanning the flow table 
         if(continue_flag != 1)
@@ -564,7 +565,7 @@ int processPacket(){
     }
     
     if(entry == NULL && continue_flag == 0){   //This means that the entire table has been looked up
-        PRINTF("TABLE MISS!\n");
+        printf("TABLE MISS!\n");
         handleTableMiss(L2_receiver, L2_sender, ptr_to_packet, packetbuf_totlen());    //without finding any right entry for this packet
     }	
     return 1;

@@ -627,7 +627,9 @@ tcpip_ipv6_output(void)
 #endif /* !UIP_FALLBACK_INTERFACE */
           
 #if NETSTACK_CONF_SDN == 1
+ //#if SINK == 0
             tcpip_output(NULL);             //When SDN is turned on, we don't care about the IP routing table
+ //#endif
 #endif                                      //send any packet to the flow table even if the routing table doesn't have a relative entry
           uip_clear_buf();
           return;

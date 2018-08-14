@@ -189,7 +189,7 @@ uip_ds6_periodic(void)
 
 #if UIP_ND6_SEND_NA
   uip_ds6_neighbor_periodic();
-#endif /* UIP_ND6_SEND_RA */
+#endif /* UIP_ND6_SEND_NA */
 
 #if UIP_CONF_ROUTER && UIP_ND6_SEND_RA
   /* Periodic RA sending */
@@ -659,7 +659,7 @@ uip_ds6_send_ra_periodic(void)
 {
   if(racount > 0) {
     /* send previously scheduled RA */
-    uip_nd6_ra_output(NULL);
+    uip_nd6_ra_output(NULL); //To all nodes multicast
     PRINTF("Sending periodic RA\n");
   }
 

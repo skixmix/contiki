@@ -47,16 +47,6 @@
 #include "net/netstack.h"
 #include "net/packetbuf.h"
 
-#define SDN_STATS 1
-#if SDN_STATS
-#include <stdio.h>
-#define PRINT_STAT(...) printf(__VA_ARGS__)
-#define PRINT_STAT_LLADDR(addr) printf("%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x", ((uint8_t *)addr)[0], ((uint8_t *)addr)[1], ((uint8_t *)addr)[2], ((uint8_t *)addr)[3], ((uint8_t *)addr)[4], ((uint8_t *)addr)[5], ((uint8_t *)addr)[6], ((uint8_t *)addr)[7])
-#else
-#define PRINT_STAT(...)
-#define PRINT_STAT_LLADDR(addr)
-#endif
-
 /*---------------------------------------------------------------------------*/
 static void
 init(void)
@@ -74,12 +64,6 @@ send(mac_callback_t sent, void *ptr)
 static void
 input(void)
 {
-    
-#if NETSTACK_CONF_SDN == 0
-#if SDN_STATS
-    PRINT_STAT("\nS_ID_%u\n", packetbuf_datalen());
-#endif
-#endif
     
 #if NETSTACK_CONF_SDN == 1
   NETSTACK_INTERCEPTOR.input();

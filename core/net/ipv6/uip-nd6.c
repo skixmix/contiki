@@ -76,7 +76,7 @@
 #include "lib/random.h"
 
 /*------------------------------------------------------------------*/
-#define DEBUG 0
+#define DEBUG DEBUG_PRINT //Mettiamoci il debug
 #include "net/ip/uip-debug.h"
 
 #if UIP_LOGGING
@@ -163,7 +163,7 @@ static void
 ns_input(void)
 {
   uint8_t flags;
-  PRINTF("Received NS from ");
+  PRINTF("Received NS from "); //Neighbor solicitation message
   PRINT6ADDR(&UIP_IP_BUF->srcipaddr);
   PRINTF(" to ");
   PRINT6ADDR(&UIP_IP_BUF->destipaddr);
@@ -597,7 +597,6 @@ discard:
 static void
 rs_input(void)
 {
-
   PRINTF("Received RS from ");
   PRINT6ADDR(&UIP_IP_BUF->srcipaddr);
   PRINTF(" to ");
@@ -698,7 +697,7 @@ uip_nd6_ra_output(uip_ipaddr_t * dest)
   UIP_IP_BUF->ttl = UIP_ND6_HOP_LIMIT;
 
   if(dest == NULL) {
-    uip_create_linklocal_allnodes_mcast(&UIP_IP_BUF->destipaddr);
+    uip_create_linklocal_allnodes_mcast(&UIP_IP_BUF->destipaddr); //ALLNODES Multicast
   } else {
     /* For sollicited RA */
     uip_ipaddr_copy(&UIP_IP_BUF->destipaddr, dest);
@@ -740,7 +739,7 @@ uip_nd6_ra_output(uip_ipaddr_t * dest)
     }
   }
 
-  /* Source link-layer option */
+  /* Source link-layer option */ //<---------------------- This is what we need to get the MAC address of router
   create_llao((uint8_t *)UIP_ND6_OPT_HDR_BUF, UIP_ND6_OPT_SLLAO);
 
   uip_len += UIP_ND6_OPT_LLAO_LEN;

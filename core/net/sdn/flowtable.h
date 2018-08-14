@@ -16,11 +16,19 @@
 #include "net/sdn/cn-cbor.h"
 
 
-/*-------------------------Constants definition-------------------------------*/
+/*-------------------------Constants definition-------------------------------*/ 
 
-#define MAX_NUM_ENTRIES         40
-#define MAX_NUM_RULES           40
-#define MAX_NUM_ACTIONS         40
+#if SINK==0 //For normal nodes
+#define MAX_NUM_ENTRIES         19 //Changed [SIMONE] -> Max number of entries inside a node's flow table
+#define MAX_NUM_RULES           19 //Changed           -> max number of RULES that can be inside ONE flow table entry
+#define MAX_NUM_ACTIONS         19 //Changed            -> max number of ACTIONS that can be inside ONE flow table entry
+                                   //DO NOT go under 10
+#else //For sink node (BR)
+#define MAX_NUM_ENTRIES         80
+#define MAX_NUM_RULES           80 
+#define MAX_NUM_ACTIONS         80
+#endif
+
 #define NUM_BYTES_2_BLOCKS      10
 #define NUM_BYTES_4_BLOCKS      0
 #define NUM_BYTES_8_BLOCKS      70
