@@ -93,7 +93,6 @@ void testing_get_handler(void* request, void* response, uint8_t *buffer, uint16_
 RESOURCE(hello_resource, "title=\"Resource\";rt=\"Text\"", testing_get_handler, NULL, NULL, NULL);
 #endif
 
-
 /*---------------------------------- Main Process Thread ----------------------------------------------*/
 PROCESS_THREAD(sdn_node, ev, data) {
 	
@@ -113,6 +112,7 @@ PROCESS_THREAD(sdn_node, ev, data) {
 		rest_init_engine();
 	    rest_activate_resource(&hello_resource, "hello");
 	#endif
+	
 	//Check if we are using SDN
   	#if NETSTACK_CONF_SDN == 1
    		control_agent_init();         

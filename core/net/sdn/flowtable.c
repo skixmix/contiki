@@ -36,7 +36,7 @@ MEMB(bytes8_memb, bytes8_t, NUM_BYTES_8_BLOCKS);
 MEMB(bytes16_memb, bytes16_t, NUM_BYTES_16_BLOCKS);
 
 
-//Function by Simone
+//Possible function for cleaning up unused entries, in order to free up some space in the flow table
 /*
 void clean_up_oldest_entry(){
     //TODO: find the oldest flow table entry and clean up its space

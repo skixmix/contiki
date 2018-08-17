@@ -3,6 +3,9 @@
  *         control_agent.c
  * \author
  *         Giulio Micheloni <giulio.micheloni@gmail.com>
+ *
+ * \updated by
+ *         Simone Tavoletta <s.tavoletta@filmsimili.it>
  */
 
 #include "net/sdn/control_agent.h"
@@ -675,7 +678,7 @@ void put_handler_flowtable(void* request, void* response, uint8_t *buffer, uint1
 }
 
 void post_handler(void* request, void* response, uint8_t *buffer, uint16_t preferred_size, int32_t *offset){
-    uint8_t *incoming = NULL;
+	uint8_t *incoming = NULL;
     uip_ipaddr_t multicast_addr;
     linkaddr_t mesh_multicast_addr;
     uint8_t addrDim;

@@ -1,23 +1,20 @@
 //SDN Sink conf
 
-//SDN
-#undef NETSTACK_CONF_SDN
-#define NETSTACK_CONF_SDN 1 //0 = off | 1 = on
-
 #ifndef PROJECT_ROUTER_CONF_H_
 #define PROJECT_ROUTER_CONF_H_
 
+#include "parametri.h"
 
 #ifndef UIP_FALLBACK_INTERFACE
 #define UIP_FALLBACK_INTERFACE rpl_interface
 #endif
 
 #ifndef QUEUEBUF_CONF_NUM
-#define QUEUEBUF_CONF_NUM          4 //It is the default value
+#define QUEUEBUF_CONF_NUM          40
 #endif
 
 #ifndef UIP_CONF_BUFFER_SIZE
-#define UIP_CONF_BUFFER_SIZE    380 // <---- THIS is the actual problem on the testbed, do not go under 200, otherwise we LOSE the CoAP requests
+#define UIP_CONF_BUFFER_SIZE    400 // <---- THIS is the actual problem on the testbed, do not go under 200, otherwise we LOSE the CoAP requests
 #endif
 
 #ifndef UIP_CONF_RECEIVE_WINDOW
@@ -25,17 +22,10 @@
 #endif
 
 //ADDED
-#define PrintStatistics 1
 
-//Set to 1 in order to hardcode the MAC address
-#ifndef IEEE_ADDR_CONF_HARDCODED
-#define IEEE_ADDR_CONF_HARDCODED             1
-#endif
-
-//Needed when the definition above is set to 1
-#ifndef IEEE_ADDR_CONF_ADDRESS
-#define IEEE_ADDR_CONF_ADDRESS {0x00, 0x01, 0x00, 0x01, 0x00, 0x01, 0x00, 0x01} //Last 2 bytes can be changed when doing the make operation
-#endif
+//Set max rest size to 256 to avoid bad CBOR packets format
+#undef REST_MAX_CHUNK_SIZE
+#define REST_MAX_CHUNK_SIZE 256
 
 //Disable TCP
 #undef UIP_CONF_TCP
@@ -50,11 +40,6 @@
 #define NETSTACK_CONF_RDC     nullrdc_driver
 #undef NULLRDC_CONF_802154_AUTOACK
 #define NULLRDC_CONF_802154_AUTOACK       1
-
-//Set max rest size to 128 to avoid bad CBOR packets format
-#undef REST_MAX_CHUNK_SIZE
-#define REST_MAX_CHUNK_SIZE 256
-
 
 //----------------------------- IF Using SDN
 #if NETSTACK_CONF_SDN == 1
@@ -85,8 +70,8 @@
 #undef UIP_CONF_ND6_SEND_NA
 #define UIP_CONF_ND6_SEND_NA 1 //Send NA
 //Timeout on neighbours
-#undef UIP_CONF_ND6_REACHABLE_TIME
-#define UIP_CONF_ND6_REACHABLE_TIME 20000
+//#undef UIP_CONF_ND6_REACHABLE_TIME
+//#define UIP_CONF_ND6_REACHABLE_TIME 20000
 
 #undef RPL_CONF_STATS
 #define RPL_CONF_STATS 0
@@ -104,13 +89,13 @@
 
 //Configure max number of neighbors
 #undef NBR_TABLE_CONF_MAX_NEIGHBORS
-#define NBR_TABLE_CONF_MAX_NEIGHBORS 12 //Default for zoul is 16, for contiki 8, do not go over 7 (otherwise set REST_MAX_CHUNK_SIZE to 256)
+#define NBR_TABLE_CONF_MAX_NEIGHBORS 10 //Default for zoul is 16, for contiki 8, do not go over 7 (otherwise set REST_MAX_CHUNK_SIZE to 256)
 
-//Runs in non-storing mode, we don't need RPL for routing, only for forming the DODAG
+//Runs in storing mode
 #undef RPL_NS_CONF_LINK_NUM
 #define RPL_NS_CONF_LINK_NUM 1 //1 link maintained
 #undef UIP_CONF_MAX_ROUTES
-#define UIP_CONF_MAX_ROUTES 1 //0 routes
+#define UIP_CONF_MAX_ROUTES 1 //1 route
 //#undef RPL_CONF_MOP
 //#define RPL_CONF_MOP RPL_MOP_NON_STORING // Mode of operation, NON storing
 
@@ -120,9 +105,9 @@
 #undef RPL_NS_CONF_LINK_NUM
 #define RPL_NS_CONF_LINK_NUM 40 //40 links maintained
 #undef UIP_CONF_MAX_ROUTES
-#define UIP_CONF_MAX_ROUTES 40
+#define UIP_CONF_MAX_ROUTES 40 
 #undef NBR_TABLE_CONF_MAX_NEIGHBORS
-#define NBR_TABLE_CONF_MAX_NEIGHBORS 12
+#define NBR_TABLE_CONF_MAX_NEIGHBORS 10
 
 #endif      //ENDIF SDN
 //ADDED
@@ -132,6 +117,3 @@
 #endif
 
 #endif /* PROJECT_ROUTER_CONF_H_ */
-
-
-

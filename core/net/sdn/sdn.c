@@ -59,6 +59,15 @@ static uint8_t lastIndex;
 static mac_callback_t sent_callback;
 static void *ptr_copy;
 
+#if TESTING_SLICE == 1
+	static struct ctimer slice_timer;
+	static int canwrite = 1;
+	void slice_callback(void *ptr){
+	  printf("Slice timer callback\n");
+	  canwrite = 1;
+	}
+#endif
+
 /*
  * Initialization function which is called during the bootstrap 
  */
@@ -233,7 +242,21 @@ input(void)
         PRINTF(" Dim = %u Orig. Address: ", origAddrDim);
         PRINTLLADDR(&origAddr);
         PRINTF("\n");
+		
+		#if TESTING_SLICE == 1
+				if(finalAddrDim == 8 && canwrite == 1){		
+					//0001000000000002
+					if(finalAddr.u8[0] == 0 && finalAddr.u8[1] == 1 && finalAddr.u8[2] == 0 && finalAddr.u8[3] == 0 && finalAddr.u8[4] == 0 && finalAddr.u8[5] == 0 && finalAddr.u8[6] == 0 && finalAddr.u8[7] == 2){
+						printf("Multicast_message_received");
+						PRINT_STAT("_%u\n", packetbuf_datalen());
+						canwrite = 0;
+						ctimer_set(&slice_timer, CLOCK_SECOND * 60 * 3, slice_callback, NULL);
+					}
+		  		}
+		#endif
 #endif
+		
+		
                 
         //Read the Final Address from the Mesh Header
         memset(&finalAddr, 0, sizeof(finalAddr));

@@ -10,6 +10,7 @@
 #define SDN_H_
 
 #include "net/sdn/interceptor.h"
+#include "sys/ctimer.h"
 
 extern const struct interceptor_driver sdn_driver;
 

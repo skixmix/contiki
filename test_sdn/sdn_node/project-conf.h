@@ -44,10 +44,6 @@
 
 //ADDED
 
-//For experiment purposes
-#define PrintStatistics 1 
-#define TESTING 1
-
 //Rpl ZERO OF
 #undef RPL_CONF_OF_OCP
 #define RPL_CONF_OF_OCP RPL_OCP_OF0

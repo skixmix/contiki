@@ -19,14 +19,14 @@
 /*-------------------------Constants definition-------------------------------*/ 
 
 #if SINK==0 //For normal nodes
-#define MAX_NUM_ENTRIES         19 //Changed [SIMONE] -> Max number of entries inside a node's flow table
-#define MAX_NUM_RULES           19 //Changed           -> max number of RULES that can be inside ONE flow table entry
-#define MAX_NUM_ACTIONS         19 //Changed            -> max number of ACTIONS that can be inside ONE flow table entry
+#define MAX_NUM_ENTRIES         500 //Modified for slicing tests
+#define MAX_NUM_RULES           500
+#define MAX_NUM_ACTIONS         500
                                    //DO NOT go under 10
 #else //For sink node (BR)
-#define MAX_NUM_ENTRIES         80
-#define MAX_NUM_RULES           80 
-#define MAX_NUM_ACTIONS         80
+#define MAX_NUM_ENTRIES         800
+#define MAX_NUM_RULES           800
+#define MAX_NUM_ACTIONS         800
 #endif
 
 #define NUM_BYTES_2_BLOCKS      10
