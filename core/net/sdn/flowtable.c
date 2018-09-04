@@ -153,7 +153,7 @@ entry_t* allocate_entry(){
 
     e = memb_alloc(&entries_memb);
     if(e == NULL) {
-        //clean_up_oldest_entry(); //Uncommented by Simone
+        //clean_up_oldest_entry(); //by Simone
         printf(">> Now retrying to allocate entry\n");
         e = memb_alloc(&entries_memb);
         if(e == NULL) {
@@ -241,7 +241,7 @@ action_t* create_action(action_type_t type, field_t field, uint8_t offset, uint8
     else{
         a->value.bytes = create_value_field(size, value);
         if(a->value.bytes == NULL){
-            PRINTF("[FLT]: Failed to allocate the field value\n");
+            PRINTF("[FLT]: Failed to allocate the field value (action)\n");
             deallocate_action(a);
             return NULL;
         }
@@ -275,7 +275,7 @@ rule_t* create_rule(field_t field, uint8_t offset, uint8_t size, operator_t oper
     else{
         r->value.bytes = create_value_field(size, value);
         if(r->value.bytes == NULL){
-            PRINTF("[FLT]: Failed to allocate the field value\n");
+            PRINTF("[FLT]: Failed to allocate the field value (rule)\n");
             deallocate_rule(r);
             return NULL;
         }
@@ -632,25 +632,34 @@ uint8_t* install_flow_entry_from_cbor(cn_cbor* flowEntry){
     operator_t operator;
     action_type_t actionType;
     uint8_t* value;
-    if(flowEntry == NULL)
+    if(flowEntry == NULL){
+        printf("FlowEntry == NULL\n");
         return NULL;
+    }
     if(flowEntry->type == CN_CBOR_ARRAY){
         support = flowEntry->first_child;
-        if(support == NULL)
+        if(support == NULL){
+            printf("Support == NULL\n");
             return NULL;
+        }
         priority = (uint16_t)support->v.uint;
         support = support->next;
-        if(support == NULL)
+        if(support == NULL){
+            printf("Support->next == null\n");
             return NULL;
+        }
         ttl = (uint16_t)support->v.uint;
         //Create the flow entry
         entry = create_entry(priority);
-        if(entry == NULL)
+        if(entry == NULL){
+            printf("Entry == null\n");
             return NULL;
+        }
         entry->stats.ttl = ttl;
         support = support->next;
         if(support == NULL){
             deallocate_entry(entry);
+            printf("Support->next->next == null\n");
             return NULL;
         }
         if(support->type == CN_CBOR_ARRAY){          //Rules
@@ -669,6 +678,7 @@ uint8_t* install_flow_entry_from_cbor(cn_cbor* flowEntry){
                     rule = create_rule(field, offset, size, operator, value);
                     if(rule == NULL){
                         deallocate_entry(entry);
+                        printf("Rule == null\n");
                         return NULL;
                     }
                 }
@@ -677,11 +687,13 @@ uint8_t* install_flow_entry_from_cbor(cn_cbor* flowEntry){
         }
         else{
             deallocate_entry(entry);
+            printf("Support->type is not CBOR\n");
             return NULL;
         }
         support = support->next;
         if(support == NULL){
             deallocate_entry(entry);
+            printf("Support->next (last) == null\n");
             return NULL;
         }
         if(support->type == CN_CBOR_ARRAY){          //Actions
@@ -700,6 +712,7 @@ uint8_t* install_flow_entry_from_cbor(cn_cbor* flowEntry){
                     action = create_action(actionType, field, offset, size, value);
                     if(action == NULL){
                         deallocate_entry(entry);
+                        printf("Action == Null\n");
                         return NULL;
                     }
                 }
@@ -708,6 +721,7 @@ uint8_t* install_flow_entry_from_cbor(cn_cbor* flowEntry){
         }
         else{
             deallocate_entry(entry);
+            printf("Support->type is not CBOR array (actions)\n");
             return NULL;
         }
     }
@@ -738,14 +752,17 @@ uint8_t* install_flow_entry_from_cbor(cn_cbor* flowEntry){
     PRINTF("\n");
     if(add_entry_to_ft(entry) != 1){
         deallocate_entry(entry);
+        printf("Add entry to ft not successfull\n");
         return NULL;
     }
     else{
         rule = list_head(entry->rules);
         if(rule->field == MH_DST_ADDR)
             return rule->value.bytes;
-        else 
+        else {
+            printf("The first Rule->Field is not MH_DST_ADDR\n");
             return NULL;
+        }
     }
 }
 

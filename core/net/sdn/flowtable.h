@@ -19,9 +19,9 @@
 /*-------------------------Constants definition-------------------------------*/ 
 
 #if SINK==0 //For normal nodes
-#define MAX_NUM_ENTRIES         500 //Modified for slicing tests
-#define MAX_NUM_RULES           500
-#define MAX_NUM_ACTIONS         500
+#define MAX_NUM_ENTRIES         100 //Modified for slicing tests
+#define MAX_NUM_RULES           100
+#define MAX_NUM_ACTIONS         100
                                    //DO NOT go under 10
 #else //For sink node (BR)
 #define MAX_NUM_ENTRIES         800

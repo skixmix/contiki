@@ -458,12 +458,8 @@ uint8_t prepare_payload_top_update(){
     memcpy(payload, header, sizeof(header));
     payload_dim = sizeof(header);
     
-    //Scan the neighbours table 
-	uint8_t i = 0;
-	
 	//printf("Lista vicini (%u): ", num_of_neigh);
-	
-    for(nbr = nbr_table_head(ds6_neighbors); nbr != NULL; nbr = nbr_table_next(ds6_neighbors, nbr)) {		
+    for(nbr = nbr_table_head(ds6_neighbors); nbr != NULL; nbr = nbr_table_next(ds6_neighbors, nbr)) {
         //Get the neighbour's MAC address
         lladdr = uip_ds6_nbr_get_ll(nbr); 
 		
@@ -472,22 +468,26 @@ uint8_t prepare_payload_top_update(){
 		
         //And its stats
 	    stats = link_stats_from_lladdr(lladdr);
-        rssi = (int16_t)-1 - stats->rssi;                   //This is needed because of the Cbor negative integer representation
-        etx = stats->etx;
-        //Set the neighbour's MAC address into the Cbor structure
+		if(stats == NULL){
+			etx = 2000;
+			rssi = (int16_t)-1 - (-2000);
+		}
+		else{
+			rssi = (int16_t)-1 - stats->rssi;                   //This is needed because of the Cbor negative integer representation
+			etx = stats->etx;
+		}
+		//Set the neighbour's MAC address into the Cbor structure
         memcpy(neighbour+1, lladdr, 8);
         //Set RSSI and ETX relative to the neighbour node
         neighbour[11] = (uint8_t)(rssi << 8);
         neighbour[12] = (uint8_t)(rssi & ((1 << 8) - 1));
         neighbour[14] = (uint8_t)(etx << 8);
         neighbour[15] = (uint8_t)(etx & ((1 << 8) - 1));
+		
+		
         //Copy the Cbor structure into the POST payload
         memcpy(payload+payload_dim, neighbour, sizeof(neighbour));
         payload_dim += sizeof(neighbour);
-		
-		i++;
-		if(i == NBR_TABLE_CONF_MAX_NEIGHBORS)
-			break;
     }
 	
 	printf("\n");
