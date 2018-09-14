@@ -32,7 +32,7 @@
 #define PROCESS_CONF_STATS 0
 
 #ifndef QUEUEBUF_CONF_NUM
-#define QUEUEBUF_CONF_NUM          8 //Buffer
+#define QUEUEBUF_CONF_NUM          5 //Buffer
 #endif
 
 #define TESTBED 1
@@ -65,7 +65,7 @@
 
 //Set max rest size to 128 to avoid bad CBOR packets format
 #undef REST_MAX_CHUNK_SIZE
-#define REST_MAX_CHUNK_SIZE 256
+#define REST_MAX_CHUNK_SIZE 128
 
 
 //---------------------------------------- If using SDN
@@ -105,7 +105,7 @@
 
 //Configure max number of neighbors
 #undef NBR_TABLE_CONF_MAX_NEIGHBORS
-#define NBR_TABLE_CONF_MAX_NEIGHBORS     10 //Default for zoul is 16, default for contiki is 8, do not go above 7 (otherwise change REST_MAX_CHUNK_SIZE to 256)
+#define NBR_TABLE_CONF_MAX_NEIGHBORS     7 //Default for zoul is 16, default for contiki is 8, do not go above 7 (otherwise change REST_MAX_CHUNK_SIZE to 256)
 
 //Runs in non-storing mode, we don't need RPL for routing, only for forming the DODAG
 #undef RPL_NS_CONF_LINK_NUM

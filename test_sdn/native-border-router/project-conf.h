@@ -24,7 +24,6 @@
 #define SLIP_DEV_CONF_SEND_DELAY (CLOCK_SECOND / 32)
 
 //ADDED
-#define PrintStatistics 1
 
 //Set max rest size to 256 to avoid bad CBOR packets format
 #undef REST_MAX_CHUNK_SIZE

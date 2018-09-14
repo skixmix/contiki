@@ -17,7 +17,7 @@
 #include "memb.h"
 
 #ifndef CBOR_MAX_ELEM
-#define CBOR_MAX_ELEM 64 //Era 64
+#define CBOR_MAX_ELEM 50 //Era 64 (For slicing it must be at least 48)
 #endif
 
 MEMB(cbor_pool, cn_cbor, CBOR_MAX_ELEM);
